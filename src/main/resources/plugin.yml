@@ -1,0 +1,89 @@
+name: GeoSpeurtocht
+version: 1.21
+api-version: 1.21
+description: Plugin voor de minecraft speurtocht bij het GeoFort
+author: Brian van Beusekom & Kevin de Schepper (eigenlijk chatje)
+main: io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht
+database: false
+softdepend: [Multiverse-Core]
+
+permissions:
+  begeleider:
+    description: Begeleider permissie
+    default: op
+  speler:
+    description: Speler permissie
+    default: true
+
+commands:
+  freeze:
+    description: Bevriest een speler
+    usage: "Gebruik: /freeze <naam>"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  unfreeze:
+    description: Bevrijd een speler
+    usage: "Gebruik: /unfreeze <naam>"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  freezeall:
+    description: Bevries alle spelers
+    usage: "Gebruik: /freezeall"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  unfreezeall:
+    description: Bevrijd alle spelers
+    usage: "Gebruik: /unfreezeall"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  tpall:
+    description: Teleporteer alle spelers naar jouw locatie
+    usage: "Gebruik: /tpall"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  broadcast:
+    description: Stuur een bericht naar alle spelers
+    usage: "Gebruik: /broadcast <bericht>"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  setstart:
+    description: Markeer het startpunt van de speurtocht
+    usage: "Gebruik: /setstart"
+    permission: begeleider
+    permission-message: Alleen de begeleider mag dat doen!
+
+  startpunt:
+    description: Teleporteer naar het startpunt
+    usage: "Gebruik: /startpunt"
+    permission: speler
+    permission-message: Je hebt geen permissie om dat te doen
+
+  startall:
+    description: Start de speurtocht
+    usage: "Gebruik: /startall <tijd in minuten>"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  stopall:
+    description: Stopt de speurtocht die nu bezig is en reset de spelers
+    usage: "Gebruik: /stopall [--force] [--keepinventory]"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  stoptimers:
+    description: Stopt de speurtocht die nu bezig is maar laat de spelers wel doorspelen
+    usage: "Gebruik: /stoptimers"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  kinderkiller:
+    description: The mighty stick
+    usage: ""
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
