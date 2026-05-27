@@ -6,7 +6,7 @@
 
     <groupId>io.github.BrianVanB</groupId>
     <artifactId>GeoSpeurtocht</artifactId>
-    <version>1.21</version>
+    <version>1.21.1</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>

@@ -1,5 +1,5 @@
 name: GeoSpeurtocht
-version: 1.21
+version: 1.21.1
 api-version: 1.21
 description: Plugin voor de minecraft speurtocht bij het GeoFort
 author: Brian van Beusekom & Kevin de Schepper (eigenlijk chatje)
@@ -85,5 +85,23 @@ commands:
   kinderkiller:
     description: The mighty stick
     usage: ""
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  addtime:
+    description: Voeg tijd toe aan de actieve speurtocht timer
+    usage: "Gebruik: /addtime <seconden>"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  addspeler:
+    description: Voeg een speler toe aan de actieve speurtocht
+    usage: "Gebruik: /addspeler <speler>"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  removespeler:
+    description: Verwijder een speler uit de actieve speurtocht
+    usage: "Gebruik: /removespeler <speler> <freeze|release>"
     permission: begeleider
     permission-message: Je hebt geen permissie om dat te doen

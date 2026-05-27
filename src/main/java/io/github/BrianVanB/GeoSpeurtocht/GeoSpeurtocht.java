@@ -15,6 +15,7 @@ import io.github.BrianVanB.Utilities.ExtraCommands;
 
 public class GeoSpeurtocht extends JavaPlugin {
 
+	//main class that is loadin in plugin.yml
 	public SpeurtochtManager SpeurManager;
 	public FreezeManager FreezeManager;
 	public ExtraCommands ExtraStuff;
@@ -26,6 +27,9 @@ public class GeoSpeurtocht extends JavaPlugin {
 		SpeurManager = new SpeurtochtManager(this);
 		ExtraStuff = new ExtraCommands(this);
 
+		/*
+		 * instantiating with this enables subclasses to have access to the main plugin
+		 * */
 		getLogger().info("Finished loading");
 	}
 
