@@ -63,11 +63,27 @@ public class GeoSpeurtocht extends JavaPlugin {
 		}
 	}
 
+	public boolean isBegeleider(Player player)
+	{
+		return player.isOp() || player.hasPermission("begeleider");
+	}
+
 	public boolean shouldClearInventory(Player player)
 	{
 		return !player.isOp() && !player.hasPermission("begeleider");
 	}
 
+	public boolean isSpeurtochtSpeler(Player player, World activeWorld)
+	{
+		if (player == null) return false;
+
+		if (!player.isOnline()) return false;
+
+		if (isBegeleider(player)) return false;
+
+        return activeWorld == null || player.getWorld().equals(activeWorld);
+
+    }
 	public GameMode getWorldConfiguredGameMode(World world)
 	{
 		try

@@ -60,10 +60,7 @@ public class SpeurtochtManager {
 
 		for (Player p : Master.getServer().getOnlinePlayers())
 		{
-			if (p.isOp())
-				continue;
-
-			if (!p.getWorld().equals(ActiveWorld))
+			if (!Master.isSpeurtochtSpeler(p, ActiveWorld))
 				continue;
 
 			ActivePlayers.add(p.getUniqueId());
@@ -76,7 +73,21 @@ public class SpeurtochtManager {
 		);
 
 		Master.FreezeManager.Unfreezeall(ActiveWorld);
-		Master.ExtraStuff.TPallInWorld(Startpunt, ActiveWorld.getName());
+		//tpall on only ActivePlayers
+		for (UUID uuid : ActivePlayers)
+		{
+			Player p = Master.getServer().getPlayer(uuid);
+
+			if (p == null)
+				continue;
+
+			if (!p.isOnline())
+				continue;
+
+			p.teleport(Startpunt);
+			p.setGameMode(Master.getWorldConfiguredGameMode(ActiveWorld));
+			Master.FreezeManager.UnFreeze(p);
+		}
 
 		Master.broadcastToWorld(
 				ActiveWorld,
@@ -159,7 +170,7 @@ public class SpeurtochtManager {
 			boolean keepInventory,
 			boolean clearInventory
 	) {
-		if (p.isOp())
+		if (Master.isBegeleider(p))
 			return;
 
 		p.teleport(Startpunt);
@@ -194,7 +205,7 @@ public class SpeurtochtManager {
 		if (Startpunt == null)
 			return false;
 
-		if (p.isOp())
+		if (Master.isBegeleider(p))
 			return false;
 
 		ActivePlayers.add(p.getUniqueId());
@@ -216,6 +227,9 @@ public class SpeurtochtManager {
 		if (Startpunt == null)
 			return false;
 
+		if (Master.isBegeleider(p))
+			return false;
+
 		ActivePlayers.remove(p.getUniqueId());
 		TimerBar.RemovePlayer(p);
 
@@ -234,6 +248,9 @@ public class SpeurtochtManager {
 	public boolean RemovePlayerRelease(Player p)
 	{
 		if (ActiveWorld == null)
+			return false;
+
+		if (Master.isBegeleider(p))
 			return false;
 
 		ActivePlayers.remove(p.getUniqueId());
