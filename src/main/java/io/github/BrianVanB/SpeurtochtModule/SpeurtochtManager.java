@@ -1,7 +1,6 @@
 package io.github.BrianVanB.SpeurtochtModule;
 
 import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
@@ -10,33 +9,21 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
 
 import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
 
 public class SpeurtochtManager {
 
-	private GeoSpeurtocht Master;
-	private SpeurCommands cmdExecutor;
+	private final GeoSpeurtocht Master;
+	private final SpeurCommands cmdExecutor;
 
-	public boolean Running;
-	public Location Startpunt;
-	public BukkitTask[] Timers;
-	public BossBarTimer TimerBar;
-	public World ActiveWorld;
+	private final SpeurtochtSession activeSession;
 
-	public Set<UUID> ActivePlayers;
-
-	public SpeurtochtManager(GeoSpeurtocht plugin)
-	{
+	public SpeurtochtManager(GeoSpeurtocht plugin) {
 		Master = plugin;
 
-		Startpunt = LoadStartpunt();
-		Running = false;
-		Timers = null;
-		TimerBar = new BossBarTimer(Master);
-		ActiveWorld = null;
-		ActivePlayers = new HashSet<>();
+		BossBarTimer timerBar = new BossBarTimer(Master);
+		activeSession = new SpeurtochtSession(LoadStartpunt(), timerBar);
 
 		cmdExecutor = new SpeurCommands(Master, this);
 
@@ -50,61 +37,93 @@ public class SpeurtochtManager {
 		Master.getCommand("addspeler").setExecutor(cmdExecutor);
 		Master.getCommand("removespeler").setExecutor(cmdExecutor);
 
-		Master.getServer().getPluginManager().registerEvents(TimerBar, Master);
+		Master.getServer().getPluginManager().registerEvents(timerBar, Master);
 	}
 
-	public void StartSpeurtocht(int minutes)
-	{
-		ActiveWorld = Startpunt.getWorld();
-		ActivePlayers.clear();
+	public boolean IsRunning() {
+		return activeSession.isRunning();
+	}
 
-		for (Player p : Master.getServer().getOnlinePlayers())
-		{
-			if (!Master.isSpeurtochtSpeler(p, ActiveWorld))
+	public Location GetStartpunt() {
+		return activeSession.getStartpunt();
+	}
+
+	public World GetActiveWorld() {
+		return activeSession.getActiveWorld();
+	}
+
+	public BossBarTimer GetTimerBar() {
+		return activeSession.getTimerBar();
+	}
+
+	public void SetStartpunt(Location location) {
+		activeSession.setStartpunt(location);
+	}
+
+	public void StartSpeurtocht(int minutes) {
+		Location startpunt = activeSession.getStartpunt();
+
+		if (startpunt == null) {
+			return;
+		}
+
+		World activeWorld = startpunt.getWorld();
+
+		if (activeWorld == null) {
+			return;
+		}
+
+		activeSession.setActiveWorld(activeWorld);
+		activeSession.clearActivePlayers();
+
+		for (Player p : Master.getServer().getOnlinePlayers()) {
+			if (!Master.isSpeurtochtSpeler(p, activeWorld)) {
 				continue;
+			}
 
-			ActivePlayers.add(p.getUniqueId());
+			activeSession.addActivePlayer(p.getUniqueId());
 		}
 
 		Master.getLogger().info(
 				"Speurtocht wordt gestart in wereld "
-						+ ActiveWorld.getName()
+						+ activeWorld.getName()
 						+ "..."
 		);
 
-		Master.FreezeManager.Unfreezeall(ActiveWorld);
-		//tpall on only ActivePlayers
-		for (UUID uuid : ActivePlayers)
-		{
+		Master.FreezeManager.Unfreezeall(activeWorld);
+
+		for (UUID uuid : activeSession.copyActivePlayers()) {
 			Player p = Master.getServer().getPlayer(uuid);
 
-			if (p == null)
+			if (p == null) {
 				continue;
+			}
 
-			if (!p.isOnline())
+			if (!p.isOnline()) {
 				continue;
+			}
 
-			p.teleport(Startpunt);
-			p.setGameMode(Master.getWorldConfiguredGameMode(ActiveWorld));
+			p.teleport(startpunt);
+			p.setGameMode(Master.getWorldConfiguredGameMode(activeWorld));
 			Master.FreezeManager.UnFreeze(p);
 		}
 
 		Master.broadcastToWorld(
-				ActiveWorld,
+				activeWorld,
 				ChatColor.GREEN + "Je mag nu beginnen. Succes!"
 		);
 
 		Master.broadcastToWorld(
-				ActiveWorld,
+				activeWorld,
 				ChatColor.GOLD + "Je hebt " + minutes + " minuten."
 		);
 
-		Running = true;
+		activeSession.setRunning(true);
 
-		TimerBar.Create(
+		activeSession.getTimerBar().Create(
 				minutes,
-				ActiveWorld,
-				ActivePlayers,
+				activeWorld,
+				activeSession.copyActivePlayers(),
 				() -> FinishSpeurtocht(false, true, false)
 		);
 	}
@@ -114,19 +133,19 @@ public class SpeurtochtManager {
 			boolean keepInventory,
 			boolean clearInventory
 	) {
-		World finishedWorld = ActiveWorld;
+		World finishedWorld = activeSession.getActiveWorld();
+		Location startpunt = activeSession.getStartpunt();
 
-		TimerBar.Cancel();
+		activeSession.getTimerBar().Cancel();
 
-		if (Startpunt == null)
+		if (startpunt == null) {
 			return;
+		}
 
-		GameMode targetMode = Master.getWorldConfiguredGameMode(Startpunt.getWorld());
+		GameMode targetMode = Master.getWorldConfiguredGameMode(startpunt.getWorld());
 
-		if (force)
-		{
-			for (Player p : Master.getServer().getOnlinePlayers())
-			{
+		if (force) {
+			for (Player p : Master.getServer().getOnlinePlayers()) {
 				ResetPlayer(p, targetMode, keepInventory, clearInventory);
 			}
 
@@ -134,24 +153,22 @@ public class SpeurtochtManager {
 					ChatColor.YELLOW
 							+ "Speurtocht geforceerd gestopt. Alle spelers zijn teruggezet."
 			);
-		}
-		else
-		{
-			for (UUID uuid : new HashSet<>(ActivePlayers))
-			{
+		} else {
+			for (UUID uuid : activeSession.copyActivePlayers()) {
 				Player p = Master.getServer().getPlayer(uuid);
 
-				if (p == null)
+				if (p == null) {
 					continue;
+				}
 
-				if (!p.isOnline())
+				if (!p.isOnline()) {
 					continue;
+				}
 
 				ResetPlayer(p, targetMode, keepInventory, clearInventory);
 			}
 
-			if (finishedWorld != null)
-			{
+			if (finishedWorld != null) {
 				Master.broadcastToWorld(
 						finishedWorld,
 						ChatColor.GOLD + "Tijd is op."
@@ -159,9 +176,12 @@ public class SpeurtochtManager {
 			}
 		}
 
-		Running = false;
-		ActiveWorld = null;
-		ActivePlayers.clear();
+		activeSession.clearRuntimeState();
+	}
+
+	public void StopTimersOnly() {
+		activeSession.getTimerBar().Cancel();
+		activeSession.setRunning(false);
 	}
 
 	private void ResetPlayer(
@@ -170,71 +190,88 @@ public class SpeurtochtManager {
 			boolean keepInventory,
 			boolean clearInventory
 	) {
-		if (Master.isBegeleider(p))
+		if (Master.isBegeleider(p)) {
 			return;
+		}
 
-		p.teleport(Startpunt);
+		Location startpunt = activeSession.getStartpunt();
+
+		if (startpunt == null) {
+			return;
+		}
+
+		p.teleport(startpunt);
 		Master.FreezeManager.Freeze(p);
 		p.setGameMode(targetMode);
 
-		if (clearInventory && !keepInventory && Master.shouldClearInventory(p))
-		{
+		if (clearInventory && !keepInventory && Master.shouldClearInventory(p)) {
 			p.getInventory().clear();
 			p.getInventory().setArmorContents(null);
 			p.updateInventory();
 		}
 	}
 
-	public boolean AddTime(int seconds)
-	{
-		if (!Running)
+	public boolean AddTime(int seconds) {
+		if (!activeSession.isRunning()) {
 			return false;
+		}
 
-		TimerBar.AddTime(seconds);
+		activeSession.getTimerBar().AddTime(seconds);
 		return true;
 	}
 
-	public boolean AddPlayerToSpeurtocht(Player p)
-	{
-		if (!Running)
+	public boolean AddPlayerToSpeurtocht(Player p) {
+		if (!activeSession.isRunning()) {
 			return false;
+		}
 
-		if (ActiveWorld == null)
+		World activeWorld = activeSession.getActiveWorld();
+		Location startpunt = activeSession.getStartpunt();
+
+		if (activeWorld == null) {
 			return false;
+		}
 
-		if (Startpunt == null)
+		if (startpunt == null) {
 			return false;
+		}
 
-		if (Master.isBegeleider(p))
+		if (Master.isBegeleider(p)) {
 			return false;
+		}
 
-		ActivePlayers.add(p.getUniqueId());
+		activeSession.addActivePlayer(p.getUniqueId());
 
-		p.teleport(Startpunt);
-		p.setGameMode(Master.getWorldConfiguredGameMode(ActiveWorld));
+		p.teleport(startpunt);
+		p.setGameMode(Master.getWorldConfiguredGameMode(activeWorld));
 		Master.FreezeManager.UnFreeze(p);
-		TimerBar.AddPlayer(p);
+		activeSession.getTimerBar().AddPlayer(p);
 
 		p.sendMessage(ChatColor.GREEN + "Je bent toegevoegd aan de speurtocht.");
 		return true;
 	}
 
-	public boolean RemovePlayerFreeze(Player p)
-	{
-		if (ActiveWorld == null)
+	public boolean RemovePlayerFreeze(Player p) {
+		World activeWorld = activeSession.getActiveWorld();
+		Location startpunt = activeSession.getStartpunt();
+
+		if (activeWorld == null) {
 			return false;
+		}
 
-		if (Startpunt == null)
+		if (startpunt == null) {
 			return false;
+		}
 
-		if (Master.isBegeleider(p))
+		if (Master.isBegeleider(p)) {
 			return false;
+		}
 
-		ActivePlayers.remove(p.getUniqueId());
-		TimerBar.RemovePlayer(p);
+		activeSession.removeActivePlayer(p.getUniqueId());
+		activeSession.getTimerBar().RemovePlayer(p);
 
-		p.teleport(Startpunt);
-		p.setGameMode(Master.getWorldConfiguredGameMode(ActiveWorld));
+		p.teleport(startpunt);
+		p.setGameMode(Master.getWorldConfiguredGameMode(activeWorld));
 		Master.FreezeManager.Freeze(p);
 
 		p.sendMessage(
@@ -245,16 +282,19 @@ public class SpeurtochtManager {
 		return true;
 	}
 
-	public boolean RemovePlayerRelease(Player p)
-	{
-		if (ActiveWorld == null)
-			return false;
+	public boolean RemovePlayerRelease(Player p) {
+		World activeWorld = activeSession.getActiveWorld();
 
-		if (Master.isBegeleider(p))
+		if (activeWorld == null) {
 			return false;
+		}
 
-		ActivePlayers.remove(p.getUniqueId());
-		TimerBar.RemovePlayer(p);
+		if (Master.isBegeleider(p)) {
+			return false;
+		}
+
+		activeSession.removeActivePlayer(p.getUniqueId());
+		activeSession.getTimerBar().RemovePlayer(p);
 		Master.FreezeManager.UnFreeze(p);
 
 		p.sendMessage(
@@ -265,19 +305,19 @@ public class SpeurtochtManager {
 		return true;
 	}
 
-	public Location LoadStartpunt()
-	{
-		try
-		{
+	public Location LoadStartpunt() {
+		try {
 			String worldName = Master.getConfig().getString("Startpunt.World");
 
-			if (worldName == null)
+			if (worldName == null) {
 				return null;
+			}
 
 			World world = Bukkit.getWorld(worldName);
 
-			if (world == null)
+			if (world == null) {
 				return null;
+			}
 
 			return new Location(
 					world,
@@ -287,9 +327,7 @@ public class SpeurtochtManager {
 					(float) Master.getConfig().getDouble("Startpunt.Yaw"),
 					(float) Master.getConfig().getDouble("Startpunt.Pitch")
 			);
-		}
-		catch (Exception e)
-		{
+		} catch (Exception e) {
 			Master.getLogger().warning(
 					"Fout bij laden van startpunt: " + e.getMessage()
 			);
@@ -298,22 +336,22 @@ public class SpeurtochtManager {
 		return null;
 	}
 
-	public void SaveStartpunt()
-	{
-		if (Startpunt == null)
-		{
+	public void SaveStartpunt() {
+		Location startpunt = activeSession.getStartpunt();
+
+		if (startpunt == null) {
 			Master.getLogger().warning(
 					"Kan geen startpunt opslaan want er is geen startpunt"
 			);
 			return;
 		}
 
-		Master.getConfig().set("Startpunt.X", Startpunt.getX());
-		Master.getConfig().set("Startpunt.Y", Startpunt.getY());
-		Master.getConfig().set("Startpunt.Z", Startpunt.getZ());
-		Master.getConfig().set("Startpunt.Yaw", Startpunt.getYaw());
-		Master.getConfig().set("Startpunt.Pitch", Startpunt.getPitch());
-		Master.getConfig().set("Startpunt.World", Startpunt.getWorld().getName());
+		Master.getConfig().set("Startpunt.X", startpunt.getX());
+		Master.getConfig().set("Startpunt.Y", startpunt.getY());
+		Master.getConfig().set("Startpunt.Z", startpunt.getZ());
+		Master.getConfig().set("Startpunt.Yaw", startpunt.getYaw());
+		Master.getConfig().set("Startpunt.Pitch", startpunt.getPitch());
+		Master.getConfig().set("Startpunt.World", startpunt.getWorld().getName());
 		Master.saveConfig();
 	}
 }

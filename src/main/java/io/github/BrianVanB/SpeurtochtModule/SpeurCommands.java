@@ -10,11 +10,10 @@ import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
 
 public class SpeurCommands implements CommandExecutor {
 
-	private GeoSpeurtocht Master;
-	private SpeurtochtManager Manager;
+	private final GeoSpeurtocht Master;
+	private final SpeurtochtManager Manager;
 
-	public SpeurCommands(GeoSpeurtocht master, SpeurtochtManager manager)
-	{
+	public SpeurCommands(GeoSpeurtocht master, SpeurtochtManager manager) {
 		Master = master;
 		Manager = manager;
 	}
@@ -26,13 +25,10 @@ public class SpeurCommands implements CommandExecutor {
 			String label,
 			String[] args
 	) {
-
-		switch (command.getName().toLowerCase())
-		{
+		switch (command.getName().toLowerCase()) {
 			case "setstart":
-				if (sender instanceof Player)
-				{
-					Manager.Startpunt = ((Player) sender).getLocation();
+				if (sender instanceof Player) {
+					Manager.SetStartpunt(((Player) sender).getLocation());
 					sender.sendMessage(ChatColor.GREEN + "Startpunt geupdate.");
 					Master.getLogger().info("Startpunt geupdate");
 					return true;
@@ -44,11 +40,11 @@ public class SpeurCommands implements CommandExecutor {
 				);
 
 			case "startpunt":
-				if (!(sender instanceof Player))
+				if (!(sender instanceof Player)) {
 					return Master.CommandError(sender, "That command is player only");
+				}
 
-				if (Manager.Startpunt == null)
-				{
+				if (Manager.GetStartpunt() == null) {
 					return Master.CommandError(
 							sender,
 							"Geen startpunt gevonden. Plaats een startpunt met /setstart",
@@ -56,20 +52,18 @@ public class SpeurCommands implements CommandExecutor {
 					);
 				}
 
-				((Player) sender).teleport(Manager.Startpunt);
+				((Player) sender).teleport(Manager.GetStartpunt());
 				return true;
 
 			case "startall":
-				if (Manager.Startpunt == null)
-				{
+				if (Manager.GetStartpunt() == null) {
 					return Master.CommandError(
 							sender,
 							"Geen startpunt gevonden. Plaats een startpunt met /setstart"
 					);
 				}
 
-				if (args.length < 1)
-				{
+				if (args.length < 1) {
 					return Master.CommandError(
 							sender,
 							"Geen tijd gegeven: "
@@ -77,8 +71,7 @@ public class SpeurCommands implements CommandExecutor {
 					);
 				}
 
-				if (Manager.Running)
-				{
+				if (Manager.IsRunning()) {
 					return Master.CommandError(
 							sender,
 							"Er is al een speurtocht bezig! Gebruik /stopall om deze eerst te stoppen."
@@ -87,32 +80,28 @@ public class SpeurCommands implements CommandExecutor {
 
 				int minutes;
 
-				try
-				{
+				try {
 					minutes = Integer.parseInt(args[0]);
-				}
-				catch (NumberFormatException e)
-				{
+				} catch (NumberFormatException e) {
 					return Master.CommandError(sender, "Ongeldige waarde in tijd.");
 				}
 
-				if (minutes <= 0)
+				if (minutes <= 0) {
 					return Master.CommandError(sender, "Tijd moet groter zijn dan 0.");
+				}
 
 				Manager.StartSpeurtocht(minutes);
 				return true;
 
 			case "stopall":
-				if (Manager.Startpunt == null)
-				{
+				if (Manager.GetStartpunt() == null) {
 					return Master.CommandError(
 							sender,
 							"Geen startpunt gevonden. Plaats een startpunt met /setstart"
 					);
 				}
 
-				if (Manager.ActiveWorld == null)
-				{
+				if (Manager.GetActiveWorld() == null) {
 					return Master.CommandError(
 							sender,
 							"Er is geen actieve speurtochtwereld ingesteld."
@@ -122,13 +111,14 @@ public class SpeurCommands implements CommandExecutor {
 				boolean force = false;
 				boolean keepInventory = false;
 
-				for (String arg : args)
-				{
-					if (arg.equalsIgnoreCase("--force"))
+				for (String arg : args) {
+					if (arg.equalsIgnoreCase("--force")) {
 						force = true;
+					}
 
-					if (arg.equalsIgnoreCase("--keepinventory"))
+					if (arg.equalsIgnoreCase("--keepinventory")) {
 						keepInventory = true;
+					}
 				}
 
 				Master.getLogger().info(
@@ -142,8 +132,7 @@ public class SpeurCommands implements CommandExecutor {
 				return true;
 
 			case "stoptimers":
-				if (!Manager.Running)
-				{
+				if (!Manager.IsRunning()) {
 					return Master.CommandError(
 							sender,
 							"Er is geen actieve speurtocht"
@@ -152,8 +141,7 @@ public class SpeurCommands implements CommandExecutor {
 
 				Master.getLogger().info("Speurtocht timers gestopt.");
 
-				Manager.TimerBar.Cancel();
-				Manager.Running = false;
+				Manager.StopTimersOnly();
 
 				sender.sendMessage(
 						"Timers gestopt. Gebruik /stopall om alle spelers te resetten"
@@ -162,16 +150,14 @@ public class SpeurCommands implements CommandExecutor {
 				return true;
 
 			case "addtime":
-				if (!Manager.Running)
-				{
+				if (!Manager.IsRunning()) {
 					return Master.CommandError(
 							sender,
 							"Er is geen actieve timer."
 					);
 				}
 
-				if (args.length < 1)
-				{
+				if (args.length < 1) {
 					return Master.CommandError(
 							sender,
 							"Gebruik: /addtime <seconden>"
@@ -180,17 +166,13 @@ public class SpeurCommands implements CommandExecutor {
 
 				int seconds;
 
-				try
-				{
+				try {
 					seconds = Integer.parseInt(args[0]);
-				}
-				catch (NumberFormatException e)
-				{
+				} catch (NumberFormatException e) {
 					return Master.CommandError(sender, "Ongeldig aantal seconden.");
 				}
 
-				if (seconds <= 0)
-				{
+				if (seconds <= 0) {
 					return Master.CommandError(
 							sender,
 							"Aantal seconden moet groter zijn dan 0."
@@ -206,10 +188,9 @@ public class SpeurCommands implements CommandExecutor {
 								+ " seconden toegevoegd aan de timer."
 				);
 
-				if (Manager.ActiveWorld != null)
-				{
+				if (Manager.GetActiveWorld() != null) {
 					Master.broadcastToWorld(
-							Manager.ActiveWorld,
+							Manager.GetActiveWorld(),
 							ChatColor.GOLD
 									+ "Er zijn "
 									+ seconds
@@ -220,16 +201,14 @@ public class SpeurCommands implements CommandExecutor {
 				return true;
 
 			case "addspeler":
-				if (!Manager.Running)
-				{
+				if (!Manager.IsRunning()) {
 					return Master.CommandError(
 							sender,
 							"Er is geen actieve speurtocht."
 					);
 				}
 
-				if (args.length < 1)
-				{
+				if (args.length < 1) {
 					return Master.CommandError(
 							sender,
 							"Gebruik: /addspeler <speler>"
@@ -238,11 +217,11 @@ public class SpeurCommands implements CommandExecutor {
 
 				Player toAdd = Master.getServer().getPlayerExact(args[0]);
 
-				if (toAdd == null)
+				if (toAdd == null) {
 					return Master.CommandError(sender, "Speler niet gevonden.");
+				}
 
-				if (!Manager.AddPlayerToSpeurtocht(toAdd))
-				{
+				if (!Manager.AddPlayerToSpeurtocht(toAdd)) {
 					return Master.CommandError(
 							sender,
 							"Kon speler niet toevoegen aan de speurtocht."
@@ -257,16 +236,14 @@ public class SpeurCommands implements CommandExecutor {
 				return true;
 
 			case "removespeler":
-				if (Manager.ActiveWorld == null)
-				{
+				if (Manager.GetActiveWorld() == null) {
 					return Master.CommandError(
 							sender,
 							"Er is geen actieve speurtochtwereld."
 					);
 				}
 
-				if (args.length < 2)
-				{
+				if (args.length < 2) {
 					return Master.CommandError(
 							sender,
 							"Gebruik: /removespeler <speler> <freeze|release>"
@@ -275,13 +252,12 @@ public class SpeurCommands implements CommandExecutor {
 
 				Player toRemove = Master.getServer().getPlayerExact(args[0]);
 
-				if (toRemove == null)
+				if (toRemove == null) {
 					return Master.CommandError(sender, "Speler niet gevonden.");
+				}
 
-				if (args[1].equalsIgnoreCase("freeze"))
-				{
-					if (!Manager.RemovePlayerFreeze(toRemove))
-					{
+				if (args[1].equalsIgnoreCase("freeze")) {
+					if (!Manager.RemovePlayerFreeze(toRemove)) {
 						return Master.CommandError(
 								sender,
 								"Kon speler niet verwijderen."
@@ -296,10 +272,8 @@ public class SpeurCommands implements CommandExecutor {
 					return true;
 				}
 
-				if (args[1].equalsIgnoreCase("release"))
-				{
-					if (!Manager.RemovePlayerRelease(toRemove))
-					{
+				if (args[1].equalsIgnoreCase("release")) {
+					if (!Manager.RemovePlayerRelease(toRemove)) {
 						return Master.CommandError(
 								sender,
 								"Kon speler niet verwijderen."
