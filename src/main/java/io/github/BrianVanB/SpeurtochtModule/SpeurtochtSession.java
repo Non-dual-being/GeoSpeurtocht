@@ -9,30 +9,36 @@ import org.bukkit.Location;
 import org.bukkit.World;
 
 /**
- * Houdt de runtime-state bij van één actieve speurtocht.
+ * Runtime-state van één actieve speurtocht.
  *
- * Fase 1:
- * - Er bestaat nog maar één sessie tegelijk.
- * - Maar de state staat niet meer los op SpeurtochtManager.
+ * Fase 2:
+ * - Eén sessie hoort nog bij precies één wereld.
+ * - Meerdere sessies kunnen tegelijk bestaan, zolang ze in verschillende werelden draaien.
  *
- * Later:
- * - Meerdere SpeurtochtSession-objecten naast elkaar.
- * - Eén sessie per wereld of één sessie voor meerdere werelden.
+ * Fase 3:
+ * - Eén sessie kan meerdere werelden besturen, bijvoorbeeld ClimateCrafter.
  */
 public class SpeurtochtSession {
 
-    private boolean running;
-    private Location startpunt;
-    private World activeWorld;
+    private final UUID sessionId;
+    private final Location startpunt;
+    private final World activeWorld;
     private final Set<UUID> activePlayers;
     private final BossBarTimer timerBar;
 
-    public SpeurtochtSession(Location startpunt, BossBarTimer timerBar) {
+    private boolean running;
+
+    public SpeurtochtSession(Location startpunt, World activeWorld, BossBarTimer timerBar) {
+        this.sessionId = UUID.randomUUID();
         this.startpunt = startpunt;
+        this.activeWorld = activeWorld;
         this.timerBar = timerBar;
-        this.running = false;
-        this.activeWorld = null;
         this.activePlayers = new HashSet<>();
+        this.running = false;
+    }
+
+    public UUID getSessionId() {
+        return sessionId;
     }
 
     public boolean isRunning() {
@@ -47,16 +53,16 @@ public class SpeurtochtSession {
         return startpunt;
     }
 
-    public void setStartpunt(Location startpunt) {
-        this.startpunt = startpunt;
-    }
-
     public World getActiveWorld() {
         return activeWorld;
     }
 
-    public void setActiveWorld(World activeWorld) {
-        this.activeWorld = activeWorld;
+    public String getActiveWorldName() {
+        if (activeWorld == null) {
+            return null;
+        }
+
+        return activeWorld.getName();
     }
 
     public BossBarTimer getTimerBar() {
@@ -89,7 +95,6 @@ public class SpeurtochtSession {
 
     public void clearRuntimeState() {
         running = false;
-        activeWorld = null;
         activePlayers.clear();
     }
 }

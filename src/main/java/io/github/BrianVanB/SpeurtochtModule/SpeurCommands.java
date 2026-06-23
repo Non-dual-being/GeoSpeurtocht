@@ -1,6 +1,7 @@
 package io.github.BrianVanB.SpeurtochtModule;
 
 import org.bukkit.ChatColor;
+import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -27,39 +28,67 @@ public class SpeurCommands implements CommandExecutor {
 	) {
 		switch (command.getName().toLowerCase()) {
 			case "setstart":
-				if (sender instanceof Player) {
-					Manager.SetStartpunt(((Player) sender).getLocation());
-					sender.sendMessage(ChatColor.GREEN + "Startpunt geupdate.");
-					Master.getLogger().info("Startpunt geupdate");
-					return true;
+				if (!(sender instanceof Player)) {
+					return Master.CommandError(
+							sender,
+							ChatColor.RED + "Dit commando heeft een spelerlocatie nodig."
+					);
 				}
 
-				return Master.CommandError(
-						sender,
-						ChatColor.RED + "Player-only command"
+				Player setStartPlayer = (Player) sender;
+				Manager.SetStartpunt(setStartPlayer.getLocation());
+
+				sender.sendMessage(
+						ChatColor.GREEN
+								+ "Startpunt geupdate voor wereld "
+								+ setStartPlayer.getWorld().getName()
+								+ "."
 				);
+
+				Master.getLogger().info(
+						"Startpunt geupdate voor wereld "
+								+ setStartPlayer.getWorld().getName()
+				);
+
+				return true;
 
 			case "startpunt":
 				if (!(sender instanceof Player)) {
-					return Master.CommandError(sender, "That command is player only");
-				}
-
-				if (Manager.GetStartpunt() == null) {
 					return Master.CommandError(
 							sender,
-							"Geen startpunt gevonden. Plaats een startpunt met /setstart",
+							ChatColor.RED + "Dit commando heeft een spelerwereld nodig."
+					);
+				}
+
+				Player startpuntPlayer = (Player) sender;
+				World startpuntWorld = startpuntPlayer.getWorld();
+
+				if (Manager.GetStartpunt(startpuntWorld) == null) {
+					return Master.CommandError(
+							sender,
+							"Geen startpunt gevonden voor deze wereld. Plaats een startpunt met /setstart",
 							true
 					);
 				}
 
-				((Player) sender).teleport(Manager.GetStartpunt());
+				startpuntPlayer.teleport(Manager.GetStartpunt(startpuntWorld));
 				return true;
 
 			case "startall":
-				if (Manager.GetStartpunt() == null) {
+				if (!(sender instanceof Player)) {
 					return Master.CommandError(
 							sender,
-							"Geen startpunt gevonden. Plaats een startpunt met /setstart"
+							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet in welke wereld gestart moet worden."
+					);
+				}
+
+				Player startPlayer = (Player) sender;
+				World startWorld = startPlayer.getWorld();
+
+				if (Manager.GetStartpunt(startWorld) == null) {
+					return Master.CommandError(
+							sender,
+							"Geen startpunt gevonden voor deze wereld. Plaats een startpunt met /setstart"
 					);
 				}
 
@@ -71,10 +100,10 @@ public class SpeurCommands implements CommandExecutor {
 					);
 				}
 
-				if (Manager.IsRunning()) {
+				if (Manager.IsRunning(startWorld)) {
 					return Master.CommandError(
 							sender,
-							"Er is al een speurtocht bezig! Gebruik /stopall om deze eerst te stoppen."
+							"Er is al een speurtocht bezig in deze wereld! Gebruik /stopall om deze eerst te stoppen."
 					);
 				}
 
@@ -90,21 +119,31 @@ public class SpeurCommands implements CommandExecutor {
 					return Master.CommandError(sender, "Tijd moet groter zijn dan 0.");
 				}
 
-				Manager.StartSpeurtocht(minutes);
+				Manager.StartSpeurtocht(startWorld, minutes);
 				return true;
 
 			case "stopall":
-				if (Manager.GetStartpunt() == null) {
+				if (!(sender instanceof Player)) {
 					return Master.CommandError(
 							sender,
-							"Geen startpunt gevonden. Plaats een startpunt met /setstart"
+							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet welke wereld gestopt moet worden."
 					);
 				}
 
-				if (Manager.GetActiveWorld() == null) {
+				Player stopPlayer = (Player) sender;
+				World stopWorld = stopPlayer.getWorld();
+
+				if (Manager.GetStartpunt(stopWorld) == null) {
 					return Master.CommandError(
 							sender,
-							"Er is geen actieve speurtochtwereld ingesteld."
+							"Geen startpunt gevonden voor deze wereld. Plaats een startpunt met /setstart"
+					);
+				}
+
+				if (Manager.GetActiveWorld(stopWorld) == null) {
+					return Master.CommandError(
+							sender,
+							"Er is geen actieve speurtocht in deze wereld."
 					);
 				}
 
@@ -122,38 +161,64 @@ public class SpeurCommands implements CommandExecutor {
 				}
 
 				Master.getLogger().info(
-						"Speurtocht wordt gestopt..."
+						"Speurtocht wordt gestopt in wereld "
+								+ stopWorld.getName()
+								+ "..."
 								+ (force
-								? " (force: hele server)"
+								? " (force: hele wereld)"
 								: " (alleen actieve spelers)")
 				);
 
-				Manager.FinishSpeurtocht(force, keepInventory, true);
+				Manager.FinishSpeurtocht(stopWorld, force, keepInventory, true);
 				return true;
 
 			case "stoptimers":
-				if (!Manager.IsRunning()) {
+				if (!(sender instanceof Player)) {
 					return Master.CommandError(
 							sender,
-							"Er is geen actieve speurtocht"
+							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet welke timer gestopt moet worden."
 					);
 				}
 
-				Master.getLogger().info("Speurtocht timers gestopt.");
+				Player stopTimerPlayer = (Player) sender;
+				World stopTimerWorld = stopTimerPlayer.getWorld();
 
-				Manager.StopTimersOnly();
+				if (!Manager.IsRunning(stopTimerWorld)) {
+					return Master.CommandError(
+							sender,
+							"Er is geen actieve speurtocht in deze wereld."
+					);
+				}
+
+				Master.getLogger().info(
+						"Speurtocht timer gestopt in wereld "
+								+ stopTimerWorld.getName()
+								+ "."
+				);
+
+				Manager.StopTimersOnly(stopTimerWorld);
 
 				sender.sendMessage(
-						"Timers gestopt. Gebruik /stopall om alle spelers te resetten"
+						"Timer gestopt. Gebruik /stopall om spelers alsnog te resetten."
 				);
 
 				return true;
 
 			case "addtime":
-				if (!Manager.IsRunning()) {
+				if (!(sender instanceof Player)) {
 					return Master.CommandError(
 							sender,
-							"Er is geen actieve timer."
+							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet welke timer aangepast moet worden."
+					);
+				}
+
+				Player addTimePlayer = (Player) sender;
+				World addTimeWorld = addTimePlayer.getWorld();
+
+				if (!Manager.IsRunning(addTimeWorld)) {
+					return Master.CommandError(
+							sender,
+							"Er is geen actieve timer in deze wereld."
 					);
 				}
 
@@ -179,32 +244,40 @@ public class SpeurCommands implements CommandExecutor {
 					);
 				}
 
-				Manager.AddTime(seconds);
+				Manager.AddTime(addTimeWorld, seconds);
 
 				sender.sendMessage(
 						ChatColor.GREEN
 								+ "Er zijn "
 								+ seconds
-								+ " seconden toegevoegd aan de timer."
+								+ " seconden toegevoegd aan de timer van deze wereld."
 				);
 
-				if (Manager.GetActiveWorld() != null) {
-					Master.broadcastToWorld(
-							Manager.GetActiveWorld(),
-							ChatColor.GOLD
-									+ "Er zijn "
-									+ seconds
-									+ " seconden toegevoegd aan de timer."
-					);
-				}
+				Master.broadcastToWorld(
+						addTimeWorld,
+						ChatColor.GOLD
+								+ "Er zijn "
+								+ seconds
+								+ " seconden toegevoegd aan de timer."
+				);
 
 				return true;
 
 			case "addspeler":
-				if (!Manager.IsRunning()) {
+				if (!(sender instanceof Player)) {
 					return Master.CommandError(
 							sender,
-							"Er is geen actieve speurtocht."
+							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet aan welke speurtocht de speler toegevoegd moet worden."
+					);
+				}
+
+				Player addCommandPlayer = (Player) sender;
+				World addCommandWorld = addCommandPlayer.getWorld();
+
+				if (!Manager.IsRunning(addCommandWorld)) {
+					return Master.CommandError(
+							sender,
+							"Er is geen actieve speurtocht in deze wereld."
 					);
 				}
 
@@ -221,7 +294,7 @@ public class SpeurCommands implements CommandExecutor {
 					return Master.CommandError(sender, "Speler niet gevonden.");
 				}
 
-				if (!Manager.AddPlayerToSpeurtocht(toAdd)) {
+				if (!Manager.AddPlayerToSpeurtocht(toAdd, addCommandWorld)) {
 					return Master.CommandError(
 							sender,
 							"Kon speler niet toevoegen aan de speurtocht."
@@ -231,15 +304,27 @@ public class SpeurCommands implements CommandExecutor {
 				sender.sendMessage(
 						ChatColor.GREEN
 								+ toAdd.getName()
-								+ " is toegevoegd aan de speurtocht."
+								+ " is toegevoegd aan de speurtocht in wereld "
+								+ addCommandWorld.getName()
+								+ "."
 				);
 				return true;
 
 			case "removespeler":
-				if (Manager.GetActiveWorld() == null) {
+				if (!(sender instanceof Player)) {
 					return Master.CommandError(
 							sender,
-							"Er is geen actieve speurtochtwereld."
+							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet uit welke speurtocht de speler verwijderd moet worden."
+					);
+				}
+
+				Player removeCommandPlayer = (Player) sender;
+				World removeCommandWorld = removeCommandPlayer.getWorld();
+
+				if (Manager.GetActiveWorld(removeCommandWorld) == null) {
+					return Master.CommandError(
+							sender,
+							"Er is geen actieve speurtocht in deze wereld."
 					);
 				}
 
@@ -257,10 +342,10 @@ public class SpeurCommands implements CommandExecutor {
 				}
 
 				if (args[1].equalsIgnoreCase("freeze")) {
-					if (!Manager.RemovePlayerFreeze(toRemove)) {
+					if (!Manager.RemovePlayerFreeze(toRemove, removeCommandWorld)) {
 						return Master.CommandError(
 								sender,
-								"Kon speler niet verwijderen."
+								"Kon speler niet verwijderen. Zit deze speler wel in de speurtocht van deze wereld?"
 						);
 					}
 
@@ -273,10 +358,10 @@ public class SpeurCommands implements CommandExecutor {
 				}
 
 				if (args[1].equalsIgnoreCase("release")) {
-					if (!Manager.RemovePlayerRelease(toRemove)) {
+					if (!Manager.RemovePlayerRelease(toRemove, removeCommandWorld)) {
 						return Master.CommandError(
 								sender,
-								"Kon speler niet verwijderen."
+								"Kon speler niet verwijderen. Zit deze speler wel in de speurtocht van deze wereld?"
 						);
 					}
 
