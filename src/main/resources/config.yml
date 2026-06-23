@@ -1,0 +1,9 @@
+speurtocht-session-groups:
+  climatecrafter:
+    display-name: "ClimateCrafter"
+    worlds:
+      - climatecrafter_diamant
+      - climatecrafter_goud
+      - climatecrafter_ijzer
+      - climatecrafter_koper
+      - climatecrafter_steenkool

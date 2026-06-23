@@ -1,5 +1,7 @@
 package io.github.BrianVanB.SpeurtochtModule;
 
+import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
+
 import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.command.Command;
@@ -7,16 +9,14 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
-
 public class SpeurCommands implements CommandExecutor {
 
 	private final GeoSpeurtocht Master;
 	private final SpeurtochtManager Manager;
 
 	public SpeurCommands(GeoSpeurtocht master, SpeurtochtManager manager) {
-		Master = master;
-		Manager = manager;
+		this.Master = master;
+		this.Manager = manager;
 	}
 
 	@Override
@@ -28,357 +28,601 @@ public class SpeurCommands implements CommandExecutor {
 	) {
 		switch (command.getName().toLowerCase()) {
 			case "setstart":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando heeft een spelerlocatie nodig."
-					);
-				}
-
-				Player setStartPlayer = (Player) sender;
-				Manager.SetStartpunt(setStartPlayer.getLocation());
-
-				sender.sendMessage(
-						ChatColor.GREEN
-								+ "Startpunt geupdate voor wereld "
-								+ setStartPlayer.getWorld().getName()
-								+ "."
-				);
-
-				Master.getLogger().info(
-						"Startpunt geupdate voor wereld "
-								+ setStartPlayer.getWorld().getName()
-				);
-
-				return true;
+				return handleSetStart(sender);
 
 			case "startpunt":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando heeft een spelerwereld nodig."
-					);
-				}
-
-				Player startpuntPlayer = (Player) sender;
-				World startpuntWorld = startpuntPlayer.getWorld();
-
-				if (Manager.GetStartpunt(startpuntWorld) == null) {
-					return Master.CommandError(
-							sender,
-							"Geen startpunt gevonden voor deze wereld. Plaats een startpunt met /setstart",
-							true
-					);
-				}
-
-				startpuntPlayer.teleport(Manager.GetStartpunt(startpuntWorld));
-				return true;
+				return handleStartpunt(sender);
 
 			case "startall":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet in welke wereld gestart moet worden."
-					);
-				}
-
-				Player startPlayer = (Player) sender;
-				World startWorld = startPlayer.getWorld();
-
-				if (Manager.GetStartpunt(startWorld) == null) {
-					return Master.CommandError(
-							sender,
-							"Geen startpunt gevonden voor deze wereld. Plaats een startpunt met /setstart"
-					);
-				}
-
-				if (args.length < 1) {
-					return Master.CommandError(
-							sender,
-							"Geen tijd gegeven: "
-									+ Master.getCommand("startall").getUsage()
-					);
-				}
-
-				if (Manager.IsRunning(startWorld)) {
-					return Master.CommandError(
-							sender,
-							"Er is al een speurtocht bezig in deze wereld! Gebruik /stopall om deze eerst te stoppen."
-					);
-				}
-
-				int minutes;
-
-				try {
-					minutes = Integer.parseInt(args[0]);
-				} catch (NumberFormatException e) {
-					return Master.CommandError(sender, "Ongeldige waarde in tijd.");
-				}
-
-				if (minutes <= 0) {
-					return Master.CommandError(sender, "Tijd moet groter zijn dan 0.");
-				}
-
-				Manager.StartSpeurtocht(startWorld, minutes);
-				return true;
+				return handleStartAll(sender, args);
 
 			case "stopall":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet welke wereld gestopt moet worden."
-					);
-				}
-
-				Player stopPlayer = (Player) sender;
-				World stopWorld = stopPlayer.getWorld();
-
-				if (Manager.GetStartpunt(stopWorld) == null) {
-					return Master.CommandError(
-							sender,
-							"Geen startpunt gevonden voor deze wereld. Plaats een startpunt met /setstart"
-					);
-				}
-
-				if (Manager.GetActiveWorld(stopWorld) == null) {
-					return Master.CommandError(
-							sender,
-							"Er is geen actieve speurtocht in deze wereld."
-					);
-				}
-
-				boolean force = false;
-				boolean keepInventory = false;
-
-				for (String arg : args) {
-					if (arg.equalsIgnoreCase("--force")) {
-						force = true;
-					}
-
-					if (arg.equalsIgnoreCase("--keepinventory")) {
-						keepInventory = true;
-					}
-				}
-
-				Master.getLogger().info(
-						"Speurtocht wordt gestopt in wereld "
-								+ stopWorld.getName()
-								+ "..."
-								+ (force
-								? " (force: hele wereld)"
-								: " (alleen actieve spelers)")
-				);
-
-				Manager.FinishSpeurtocht(stopWorld, force, keepInventory, true);
-				return true;
+				return handleStopAll(sender, args);
 
 			case "stoptimers":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet welke timer gestopt moet worden."
-					);
-				}
-
-				Player stopTimerPlayer = (Player) sender;
-				World stopTimerWorld = stopTimerPlayer.getWorld();
-
-				if (!Manager.IsRunning(stopTimerWorld)) {
-					return Master.CommandError(
-							sender,
-							"Er is geen actieve speurtocht in deze wereld."
-					);
-				}
-
-				Master.getLogger().info(
-						"Speurtocht timer gestopt in wereld "
-								+ stopTimerWorld.getName()
-								+ "."
-				);
-
-				Manager.StopTimersOnly(stopTimerWorld);
-
-				sender.sendMessage(
-						"Timer gestopt. Gebruik /stopall om spelers alsnog te resetten."
-				);
-
-				return true;
+				return handleStopTimers(sender);
 
 			case "addtime":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet welke timer aangepast moet worden."
-					);
-				}
-
-				Player addTimePlayer = (Player) sender;
-				World addTimeWorld = addTimePlayer.getWorld();
-
-				if (!Manager.IsRunning(addTimeWorld)) {
-					return Master.CommandError(
-							sender,
-							"Er is geen actieve timer in deze wereld."
-					);
-				}
-
-				if (args.length < 1) {
-					return Master.CommandError(
-							sender,
-							"Gebruik: /addtime <seconden>"
-					);
-				}
-
-				int seconds;
-
-				try {
-					seconds = Integer.parseInt(args[0]);
-				} catch (NumberFormatException e) {
-					return Master.CommandError(sender, "Ongeldig aantal seconden.");
-				}
-
-				if (seconds <= 0) {
-					return Master.CommandError(
-							sender,
-							"Aantal seconden moet groter zijn dan 0."
-					);
-				}
-
-				Manager.AddTime(addTimeWorld, seconds);
-
-				sender.sendMessage(
-						ChatColor.GREEN
-								+ "Er zijn "
-								+ seconds
-								+ " seconden toegevoegd aan de timer van deze wereld."
-				);
-
-				Master.broadcastToWorld(
-						addTimeWorld,
-						ChatColor.GOLD
-								+ "Er zijn "
-								+ seconds
-								+ " seconden toegevoegd aan de timer."
-				);
-
-				return true;
+				return handleAddTime(sender, args);
 
 			case "addspeler":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet aan welke speurtocht de speler toegevoegd moet worden."
-					);
-				}
-
-				Player addCommandPlayer = (Player) sender;
-				World addCommandWorld = addCommandPlayer.getWorld();
-
-				if (!Manager.IsRunning(addCommandWorld)) {
-					return Master.CommandError(
-							sender,
-							"Er is geen actieve speurtocht in deze wereld."
-					);
-				}
-
-				if (args.length < 1) {
-					return Master.CommandError(
-							sender,
-							"Gebruik: /addspeler <speler>"
-					);
-				}
-
-				Player toAdd = Master.getServer().getPlayerExact(args[0]);
-
-				if (toAdd == null) {
-					return Master.CommandError(sender, "Speler niet gevonden.");
-				}
-
-				if (!Manager.AddPlayerToSpeurtocht(toAdd, addCommandWorld)) {
-					return Master.CommandError(
-							sender,
-							"Kon speler niet toevoegen aan de speurtocht."
-					);
-				}
-
-				sender.sendMessage(
-						ChatColor.GREEN
-								+ toAdd.getName()
-								+ " is toegevoegd aan de speurtocht in wereld "
-								+ addCommandWorld.getName()
-								+ "."
-				);
-				return true;
+				return handleAddSpeler(sender, args);
 
 			case "removespeler":
-				if (!(sender instanceof Player)) {
-					return Master.CommandError(
-							sender,
-							ChatColor.RED + "Dit commando moet door een speler worden uitgevoerd, zodat de plugin weet uit welke speurtocht de speler verwijderd moet worden."
-					);
-				}
+				return handleRemoveSpeler(sender, args);
 
-				Player removeCommandPlayer = (Player) sender;
-				World removeCommandWorld = removeCommandPlayer.getWorld();
+			default:
+				return false;
+		}
+	}
 
-				if (Manager.GetActiveWorld(removeCommandWorld) == null) {
-					return Master.CommandError(
-							sender,
-							"Er is geen actieve speurtocht in deze wereld."
-					);
-				}
+	private boolean handleSetStart(CommandSender sender) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED + "Dit commando heeft een spelerlocatie nodig."
+		);
 
-				if (args.length < 2) {
-					return Master.CommandError(
-							sender,
-							"Gebruik: /removespeler <speler> <freeze|release>"
-					);
-				}
-
-				Player toRemove = Master.getServer().getPlayerExact(args[0]);
-
-				if (toRemove == null) {
-					return Master.CommandError(sender, "Speler niet gevonden.");
-				}
-
-				if (args[1].equalsIgnoreCase("freeze")) {
-					if (!Manager.RemovePlayerFreeze(toRemove, removeCommandWorld)) {
-						return Master.CommandError(
-								sender,
-								"Kon speler niet verwijderen. Zit deze speler wel in de speurtocht van deze wereld?"
-						);
-					}
-
-					sender.sendMessage(
-							ChatColor.YELLOW
-									+ toRemove.getName()
-									+ " is verwijderd, teruggezet en bevroren."
-					);
-					return true;
-				}
-
-				if (args[1].equalsIgnoreCase("release")) {
-					if (!Manager.RemovePlayerRelease(toRemove, removeCommandWorld)) {
-						return Master.CommandError(
-								sender,
-								"Kon speler niet verwijderen. Zit deze speler wel in de speurtocht van deze wereld?"
-						);
-					}
-
-					sender.sendMessage(
-							ChatColor.YELLOW
-									+ toRemove.getName()
-									+ " is verwijderd en vrijgegeven."
-					);
-					return true;
-				}
-
-				return Master.CommandError(
-						sender,
-						"Onbekende optie. Gebruik freeze of release."
-				);
+		if (player == null) {
+			return false;
 		}
 
-		return false;
+		SessionContext context = getSessionContext(player);
+
+		/*
+		 * Let op:
+		 * We slaan bewust de echte fysieke Location op.
+		 * Dus bij ClimateCrafter bijvoorbeeld:
+		 *
+		 * sessionKey: climatecrafter
+		 * location.world: climatecrafter_diamant
+		 *
+		 * Dat is correct.
+		 */
+		Manager.SetStartpunt(player.getLocation());
+
+		sender.sendMessage(
+				ChatColor.GREEN
+						+ "Startpunt geüpdatet voor speurtocht "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GREEN
+						+ "."
+		);
+
+		Master.getLogger().info(
+				"Startpunt geüpdatet voor sessie "
+						+ context.sessionKey
+						+ " vanuit wereld "
+						+ context.world.getName()
+		);
+
+		return true;
+	}
+
+	private boolean handleStartpunt(CommandSender sender) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED + "Dit commando heeft een spelerwereld nodig."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (Manager.GetStartpunt(context.world) == null) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Geen startpunt gevonden voor speurtocht "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ ". Plaats een startpunt met /setstart",
+					true
+			);
+		}
+
+		player.teleport(Manager.GetStartpunt(context.world));
+
+		sender.sendMessage(
+				ChatColor.GREEN
+						+ "Je bent geteleporteerd naar het startpunt van "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GREEN
+						+ "."
+		);
+
+		return true;
+	}
+
+	private boolean handleStartAll(CommandSender sender, String[] args) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet welke speurtocht gestart moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (Manager.GetStartpunt(context.world) == null) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Geen startpunt gevonden voor speurtocht "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ ". Plaats een startpunt met /setstart"
+			);
+		}
+
+		if (args.length < 1) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Geen tijd gegeven. Gebruik: "
+							+ ChatColor.WHITE
+							+ Master.getCommand("startall").getUsage()
+			);
+		}
+
+		if (Manager.IsRunning(context.world)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Er is al een speurtocht bezig voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ ". Gebruik /stopall om deze eerst te stoppen."
+			);
+		}
+
+		int minutes;
+
+		try {
+			minutes = Integer.parseInt(args[0]);
+		} catch (NumberFormatException e) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Ongeldige waarde voor tijd."
+			);
+		}
+
+		if (minutes <= 0) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Tijd moet groter zijn dan 0."
+			);
+		}
+
+		Master.getLogger().info(
+				"Speurtocht wordt gestart voor sessie "
+						+ context.sessionKey
+						+ " vanuit wereld "
+						+ context.world.getName()
+						+ " voor "
+						+ minutes
+						+ " minuten."
+		);
+
+		Manager.StartSpeurtocht(context.world, minutes);
+
+		sender.sendMessage(
+				ChatColor.GREEN
+						+ "Speurtocht gestart voor "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GREEN
+						+ " voor "
+						+ minutes
+						+ " minuten."
+		);
+
+		return true;
+	}
+
+	private boolean handleStopAll(CommandSender sender, String[] args) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet welke speurtocht gestopt moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (Manager.GetStartpunt(context.world) == null) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Geen startpunt gevonden voor speurtocht "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ ". Plaats een startpunt met /setstart"
+			);
+		}
+
+		if (Manager.GetActiveWorld(context.world) == null) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Er is geen actieve speurtocht voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ "."
+			);
+		}
+
+		boolean force = false;
+		boolean keepInventory = false;
+
+		for (String arg : args) {
+			if (arg.equalsIgnoreCase("--force")) {
+				force = true;
+			}
+
+			if (arg.equalsIgnoreCase("--keepinventory")) {
+				keepInventory = true;
+			}
+		}
+
+		Master.getLogger().info(
+				"Speurtocht wordt gestopt voor sessie "
+						+ context.sessionKey
+						+ " vanuit wereld "
+						+ context.world.getName()
+						+ "..."
+						+ (force
+						? " (force: hele sessie/fysieke wereld volgens Manager-logica)"
+						: " (alleen actieve spelers)")
+		);
+
+		Manager.FinishSpeurtocht(context.world, force, keepInventory, true);
+
+		sender.sendMessage(
+				ChatColor.YELLOW
+						+ "Speurtocht gestopt voor "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.YELLOW
+						+ "."
+		);
+
+		return true;
+	}
+
+	private boolean handleStopTimers(CommandSender sender) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet welke timer gestopt moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (!Manager.IsRunning(context.world)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Er is geen actieve speurtocht voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ "."
+			);
+		}
+
+		Master.getLogger().info(
+				"Speurtocht timer gestopt voor sessie "
+						+ context.sessionKey
+						+ " vanuit wereld "
+						+ context.world.getName()
+						+ "."
+		);
+
+		Manager.StopTimersOnly(context.world);
+
+		sender.sendMessage(
+				ChatColor.YELLOW
+						+ "Timer gestopt voor "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.YELLOW
+						+ ". Gebruik /stopall om spelers alsnog te resetten."
+		);
+
+		return true;
+	}
+
+	private boolean handleAddTime(CommandSender sender, String[] args) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet welke timer aangepast moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (!Manager.IsRunning(context.world)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Er is geen actieve timer voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ "."
+			);
+		}
+
+		if (args.length < 1) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Gebruik: /addtime <seconden>"
+			);
+		}
+
+		int seconds;
+
+		try {
+			seconds = Integer.parseInt(args[0]);
+		} catch (NumberFormatException e) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Ongeldig aantal seconden."
+			);
+		}
+
+		if (seconds <= 0) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Aantal seconden moet groter zijn dan 0."
+			);
+		}
+
+		Manager.AddTime(context.world, seconds);
+
+		sender.sendMessage(
+				ChatColor.GREEN
+						+ "Er zijn "
+						+ seconds
+						+ " seconden toegevoegd aan de timer van "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GREEN
+						+ "."
+		);
+
+		Master.broadcastToWorld(
+				context.world,
+				ChatColor.GOLD
+						+ "Er zijn "
+						+ seconds
+						+ " seconden toegevoegd aan de timer."
+		);
+
+		return true;
+	}
+
+	private boolean handleAddSpeler(CommandSender sender, String[] args) {
+		Player commandPlayer = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet aan welke speurtocht de speler toegevoegd moet worden."
+		);
+
+		if (commandPlayer == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(commandPlayer);
+
+		if (!Manager.IsRunning(context.world)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Er is geen actieve speurtocht voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ "."
+			);
+		}
+
+		if (args.length < 1) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Gebruik: /addspeler <speler>"
+			);
+		}
+
+		Player playerToAdd = Master.getServer().getPlayerExact(args[0]);
+
+		if (playerToAdd == null) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Speler niet gevonden."
+			);
+		}
+
+		if (!Manager.AddPlayerToSpeurtocht(playerToAdd, context.world)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Kon speler niet toevoegen aan de speurtocht "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ "."
+			);
+		}
+
+		sender.sendMessage(
+				ChatColor.GREEN
+						+ playerToAdd.getName()
+						+ " is toegevoegd aan "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GREEN
+						+ "."
+		);
+
+		return true;
+	}
+
+	private boolean handleRemoveSpeler(CommandSender sender, String[] args) {
+		Player commandPlayer = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet uit welke speurtocht de speler verwijderd moet worden."
+		);
+
+		if (commandPlayer == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(commandPlayer);
+
+		if (Manager.GetActiveWorld(context.world) == null) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Er is geen actieve speurtocht voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.RED
+							+ "."
+			);
+		}
+
+		if (args.length < 2) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Gebruik: /removespeler <speler> <freeze|release>"
+			);
+		}
+
+		Player playerToRemove = Master.getServer().getPlayerExact(args[0]);
+
+		if (playerToRemove == null) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + "Speler niet gevonden."
+			);
+		}
+
+		if (args[1].equalsIgnoreCase("freeze")) {
+			if (!Manager.RemovePlayerFreeze(playerToRemove, context.world)) {
+				return Master.CommandError(
+						sender,
+						ChatColor.RED
+								+ "Kon speler niet verwijderen. Zit deze speler wel in "
+								+ ChatColor.WHITE
+								+ context.displayName
+								+ ChatColor.RED
+								+ "?"
+				);
+			}
+
+			sender.sendMessage(
+					ChatColor.YELLOW
+							+ playerToRemove.getName()
+							+ " is verwijderd uit "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.YELLOW
+							+ ", teruggezet en bevroren."
+			);
+
+			return true;
+		}
+
+		if (args[1].equalsIgnoreCase("release")) {
+			if (!Manager.RemovePlayerRelease(playerToRemove, context.world)) {
+				return Master.CommandError(
+						sender,
+						ChatColor.RED
+								+ "Kon speler niet verwijderen. Zit deze speler wel in "
+								+ ChatColor.WHITE
+								+ context.displayName
+								+ ChatColor.RED
+								+ "?"
+				);
+			}
+
+			sender.sendMessage(
+					ChatColor.YELLOW
+							+ playerToRemove.getName()
+							+ " is verwijderd uit "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.YELLOW
+							+ " en vrijgegeven."
+			);
+
+			return true;
+		}
+
+		return Master.CommandError(
+				sender,
+				ChatColor.RED + "Onbekende optie. Gebruik freeze of release."
+		);
+	}
+
+	private Player getPlayerOrError(CommandSender sender, String errorMessage) {
+		if (!(sender instanceof Player)) {
+			Master.CommandError(sender, errorMessage);
+			return null;
+		}
+
+		return (Player) sender;
+	}
+
+	private SessionContext getSessionContext(Player player) {
+		World world = player.getWorld();
+		String sessionKey = Master.getSessionResolver().resolveSessionKey(world);
+		String displayName = Master.getSessionResolver().getDisplayName(sessionKey);
+
+		return new SessionContext(world, sessionKey, displayName);
+	}
+
+	private static final class SessionContext {
+		private final World world;
+		private final String sessionKey;
+		private final String displayName;
+
+		private SessionContext(World world, String sessionKey, String displayName) {
+			this.world = world;
+			this.sessionKey = sessionKey;
+			this.displayName = displayName;
+		}
 	}
 }
