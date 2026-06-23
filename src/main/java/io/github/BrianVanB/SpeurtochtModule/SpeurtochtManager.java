@@ -1,8 +1,6 @@
 package io.github.BrianVanB.SpeurtochtModule;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -12,42 +10,48 @@ import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class SpeurtochtManager {
 
 	private final GeoSpeurtocht Master;
 	private final SpeurCommands cmdExecutor;
 
-	/**
-	 * Startpunten per wereld.
+	/*
+	 * FASE 3:
+	 * Deze map is niet meer echt "by world", maar "by session key".
 	 *
-	 * Key: worldName
-	 * Value: startlocatie in die wereld
+	 * Voorbeeld:
+	 * GeoFort_Heat             -> startpunt in GeoFort_Heat
+	 * GeoFort_overstroming     -> startpunt in GeoFort_overstroming
+	 * climatecrafter           -> startpunt in bijvoorbeeld climatecrafter_diamant
 	 */
-	private final Map<String, Location> startpuntenByWorld;
+	private final Map<String, Location> startpuntenBySessionKey;
 
-	/**
-	 * Actieve speurtochten per wereld.
+	/*
+	 * FASE 3:
+	 * Actieve sessies worden opgeslagen per logische speurtocht-sessie.
 	 *
-	 * Fase 2:
-	 * - Eén sessie per wereld.
+	 * Voorbeeld:
+	 * GeoFort_Heat             -> eigen sessie
+	 * GeoFort_overstroming     -> eigen sessie
+	 * climatecrafter           -> gezamenlijke sessie voor diamant/goud/ijzer/koper/steenkool
 	 */
-	private final Map<String, SpeurtochtSession> activeSessionsByWorld;
+	private final Map<String, SpeurtochtSession> activeSessionsBySessionKey;
 
-	/**
-	 * Voorkomt dat één speler tegelijk in twee speurtochten zit.
-	 *
-	 * Key: player UUID
-	 * Value: sessie waarin de speler actief is
+	/*
+	 * Snelle lookup:
+	 * speler UUID -> actieve speurtocht sessie
 	 */
 	private final Map<UUID, SpeurtochtSession> activeSessionsByPlayer;
 
 	public SpeurtochtManager(GeoSpeurtocht plugin) {
 		Master = plugin;
 
-		startpuntenByWorld = LoadStartpunten();
-		activeSessionsByWorld = new HashMap<>();
+		startpuntenBySessionKey = LoadStartpunten();
+		activeSessionsBySessionKey = new HashMap<>();
 		activeSessionsByPlayer = new HashMap<>();
 
 		cmdExecutor = new SpeurCommands(Master, this);
@@ -74,19 +78,17 @@ public class SpeurtochtManager {
 			return null;
 		}
 
-		return startpuntenByWorld.get(world.getName());
+		String sessionKey = GetSessionKey(world);
+
+		return startpuntenBySessionKey.get(sessionKey);
 	}
 
-	/**
-	 * Alleen nog aanwezig voor backwards compatibility.
-	 * Gebruik in nieuwe code liever GetStartpunt(World world).
-	 */
 	public Location GetStartpunt() {
-		if (startpuntenByWorld.size() != 1) {
+		if (startpuntenBySessionKey.size() != 1) {
 			return null;
 		}
 
-		return startpuntenByWorld.values().iterator().next();
+		return startpuntenBySessionKey.values().iterator().next();
 	}
 
 	public World GetActiveWorld(World world) {
@@ -104,7 +106,19 @@ public class SpeurtochtManager {
 			return;
 		}
 
-		startpuntenByWorld.put(location.getWorld().getName(), location);
+		String sessionKey = GetSessionKey(location.getWorld());
+
+		/*
+		 * Belangrijk:
+		 * De key is de logische sessie.
+		 * De Location zelf bewaart nog steeds de echte Minecraft-wereld.
+		 *
+		 * Dus:
+		 * key: climatecrafter
+		 * location.world: climatecrafter_diamant
+		 */
+		startpuntenBySessionKey.put(sessionKey, location);
+
 		SaveStartpunt();
 	}
 
@@ -113,9 +127,10 @@ public class SpeurtochtManager {
 			return;
 		}
 
-		String worldName = world.getName();
+		String sessionKey = GetSessionKey(world);
+		String displayName = GetDisplayName(sessionKey);
 
-		if (activeSessionsByWorld.containsKey(worldName)) {
+		if (activeSessionsBySessionKey.containsKey(sessionKey)) {
 			return;
 		}
 
@@ -126,50 +141,76 @@ public class SpeurtochtManager {
 		}
 
 		BossBarTimer timerBar = new BossBarTimer(Master);
+
+		/*
+		 * activeWorld blijft de wereld van waaruit je start.
+		 * Bij ClimateCrafter kan dat bijvoorbeeld climatecrafter_diamant zijn.
+		 */
 		SpeurtochtSession session = new SpeurtochtSession(startpunt, world, timerBar);
 
-		for (Player p : world.getPlayers()) {
-			if (!Master.isSpeurtochtSpeler(p, world)) {
+		/*
+		 * FASE 3:
+		 * Niet meer alleen world.getPlayers().
+		 *
+		 * Want bij ClimateCrafter moeten spelers uit:
+		 * - climatecrafter_diamant
+		 * - climatecrafter_goud
+		 * - climatecrafter_ijzer
+		 * - climatecrafter_koper
+		 * - climatecrafter_steenkool
+		 *
+		 * allemaal bij dezelfde sessie kunnen horen.
+		 */
+		for (Player player : Master.getServer().getOnlinePlayers()) {
+			if (!Master.isSpeurtochtSpeler(player, world)) {
 				continue;
 			}
 
-			session.addActivePlayer(p.getUniqueId());
-			activeSessionsByPlayer.put(p.getUniqueId(), session);
+			session.addActivePlayer(player.getUniqueId());
+			activeSessionsByPlayer.put(player.getUniqueId(), session);
 		}
 
-		activeSessionsByWorld.put(worldName, session);
+		activeSessionsBySessionKey.put(sessionKey, session);
 
 		Master.getLogger().info(
-				"Speurtocht wordt gestart in wereld "
-						+ worldName
+				"Speurtocht wordt gestart voor sessie "
+						+ sessionKey
+						+ " ("
+						+ displayName
+						+ ") vanuit wereld "
+						+ world.getName()
 						+ "..."
 		);
 
+		/*
+		 * Deze blijft staan voor backwards compatibility.
+		 * Daarna unfreezen we sowieso de actieve spelers individueel.
+		 */
 		Master.FreezeManager.Unfreezeall(world);
 
 		for (UUID uuid : session.copyActivePlayers()) {
-			Player p = Master.getServer().getPlayer(uuid);
+			Player player = Master.getServer().getPlayer(uuid);
 
-			if (p == null) {
+			if (player == null) {
 				continue;
 			}
 
-			if (!p.isOnline()) {
+			if (!player.isOnline()) {
 				continue;
 			}
 
-			p.teleport(startpunt);
-			p.setGameMode(Master.getWorldConfiguredGameMode(world));
-			Master.FreezeManager.UnFreeze(p);
+			player.teleport(startpunt);
+			player.setGameMode(Master.getWorldConfiguredGameMode(startpunt.getWorld()));
+			Master.FreezeManager.UnFreeze(player);
 		}
 
-		Master.broadcastToWorld(
-				world,
+		BroadcastToSession(
+				sessionKey,
 				ChatColor.GREEN + "Je mag nu beginnen. Succes!"
 		);
 
-		Master.broadcastToWorld(
-				world,
+		BroadcastToSession(
+				sessionKey,
 				ChatColor.GOLD + "Je hebt " + minutes + " minuten."
 		);
 
@@ -205,35 +246,50 @@ public class SpeurtochtManager {
 			return;
 		}
 
-		GameMode targetMode = Master.getWorldConfiguredGameMode(finishedWorld);
+		String sessionKey = GetSessionKey(finishedWorld);
+
+		/*
+		 * We gebruiken de gamemode van de startpuntwereld.
+		 * Dat is veiliger dan blind de command-world gebruiken.
+		 */
+		GameMode targetMode = Master.getWorldConfiguredGameMode(startpunt.getWorld());
 
 		if (force) {
-			for (Player p : finishedWorld.getPlayers()) {
-				ResetPlayer(p, session, targetMode, keepInventory, clearInventory);
+			/*
+			 * FASE 3:
+			 * Force geldt voor de volledige logische sessie.
+			 * Dus bij ClimateCrafter niet alleen de fysieke wereld waarin je staat.
+			 */
+			for (Player player : Master.getServer().getOnlinePlayers()) {
+				if (!IsPlayerInSession(player, sessionKey)) {
+					continue;
+				}
+
+				ResetPlayer(player, session, targetMode, keepInventory, clearInventory);
 			}
 
-			Master.broadcastToWorld(
-					finishedWorld,
+			BroadcastToSession(
+					sessionKey,
 					ChatColor.YELLOW
-							+ "Speurtocht geforceerd gestopt. Alle spelers in deze wereld zijn teruggezet."
+							+ "Speurtocht geforceerd gestopt. Alle spelers in deze speurtocht zijn teruggezet."
 			);
 		} else {
 			for (UUID uuid : session.copyActivePlayers()) {
-				Player p = Master.getServer().getPlayer(uuid);
+				Player player = Master.getServer().getPlayer(uuid);
 
-				if (p == null) {
+				if (player == null) {
 					continue;
 				}
 
-				if (!p.isOnline()) {
+				if (!player.isOnline()) {
 					continue;
 				}
 
-				ResetPlayer(p, session, targetMode, keepInventory, clearInventory);
+				ResetPlayer(player, session, targetMode, keepInventory, clearInventory);
 			}
 
-			Master.broadcastToWorld(
-					finishedWorld,
+			BroadcastToSession(
+					sessionKey,
 					ChatColor.GOLD + "Tijd is op."
 			);
 		}
@@ -253,13 +309,13 @@ public class SpeurtochtManager {
 	}
 
 	private void ResetPlayer(
-			Player p,
+			Player player,
 			SpeurtochtSession session,
 			GameMode targetMode,
 			boolean keepInventory,
 			boolean clearInventory
 	) {
-		if (Master.isBegeleider(p)) {
+		if (Master.isBegeleider(player)) {
 			return;
 		}
 
@@ -269,14 +325,14 @@ public class SpeurtochtManager {
 			return;
 		}
 
-		p.teleport(startpunt);
-		Master.FreezeManager.Freeze(p);
-		p.setGameMode(targetMode);
+		player.teleport(startpunt);
+		Master.FreezeManager.Freeze(player);
+		player.setGameMode(targetMode);
 
-		if (clearInventory && !keepInventory && Master.shouldClearInventory(p)) {
-			p.getInventory().clear();
-			p.getInventory().setArmorContents(null);
-			p.updateInventory();
+		if (clearInventory && !keepInventory && Master.shouldClearInventory(player)) {
+			player.getInventory().clear();
+			player.getInventory().setArmorContents(null);
+			player.updateInventory();
 		}
 	}
 
@@ -295,7 +351,7 @@ public class SpeurtochtManager {
 		return true;
 	}
 
-	public boolean AddPlayerToSpeurtocht(Player p, World commandWorld) {
+	public boolean AddPlayerToSpeurtocht(Player player, World commandWorld) {
 		SpeurtochtSession session = GetSession(commandWorld);
 
 		if (session == null) {
@@ -306,14 +362,14 @@ public class SpeurtochtManager {
 			return false;
 		}
 
-		if (Master.isBegeleider(p)) {
+		if (Master.isBegeleider(player)) {
 			return false;
 		}
 
-		SpeurtochtSession existingSession = activeSessionsByPlayer.get(p.getUniqueId());
+		SpeurtochtSession existingSession = activeSessionsByPlayer.get(player.getUniqueId());
 
 		if (existingSession != null && existingSession != session) {
-			p.sendMessage(
+			player.sendMessage(
 					ChatColor.RED
 							+ "Je zit al in een andere actieve speurtocht."
 			);
@@ -327,49 +383,50 @@ public class SpeurtochtManager {
 			return false;
 		}
 
-		session.addActivePlayer(p.getUniqueId());
-		activeSessionsByPlayer.put(p.getUniqueId(), session);
+		session.addActivePlayer(player.getUniqueId());
+		activeSessionsByPlayer.put(player.getUniqueId(), session);
 
-		p.teleport(startpunt);
-		p.setGameMode(Master.getWorldConfiguredGameMode(activeWorld));
-		Master.FreezeManager.UnFreeze(p);
-		session.getTimerBar().AddPlayer(p);
+		player.teleport(startpunt);
+		player.setGameMode(Master.getWorldConfiguredGameMode(startpunt.getWorld()));
+		Master.FreezeManager.UnFreeze(player);
+		session.getTimerBar().AddPlayer(player);
 
-		p.sendMessage(ChatColor.GREEN + "Je bent toegevoegd aan de speurtocht.");
+		player.sendMessage(ChatColor.GREEN + "Je bent toegevoegd aan de speurtocht.");
 		return true;
 	}
 
-	public boolean RemovePlayerFreeze(Player p, World commandWorld) {
+	public boolean RemovePlayerFreeze(Player player, World commandWorld) {
 		SpeurtochtSession session = GetSession(commandWorld);
 
 		if (session == null) {
 			return false;
 		}
 
-		if (Master.isBegeleider(p)) {
+		if (Master.isBegeleider(player)) {
 			return false;
 		}
 
-		if (!session.hasActivePlayer(p.getUniqueId())) {
+		if (!session.hasActivePlayer(player.getUniqueId())) {
 			return false;
 		}
 
-		World activeWorld = session.getActiveWorld();
 		Location startpunt = session.getStartpunt();
 
-		if (activeWorld == null || startpunt == null) {
+		if (startpunt == null || startpunt.getWorld() == null) {
 			return false;
 		}
 
-		session.removeActivePlayer(p.getUniqueId());
-		RemovePlayerSessionLink(p.getUniqueId(), session);
-		session.getTimerBar().RemovePlayer(p);
+		GameMode targetMode = Master.getWorldConfiguredGameMode(startpunt.getWorld());
 
-		p.teleport(startpunt);
-		p.setGameMode(Master.getWorldConfiguredGameMode(activeWorld));
-		Master.FreezeManager.Freeze(p);
+		session.removeActivePlayer(player.getUniqueId());
+		RemovePlayerSessionLink(player.getUniqueId(), session);
+		session.getTimerBar().RemovePlayer(player);
 
-		p.sendMessage(
+		player.teleport(startpunt);
+		player.setGameMode(targetMode);
+		Master.FreezeManager.Freeze(player);
+
+		player.sendMessage(
 				ChatColor.YELLOW
 						+ "Je bent uit de speurtocht gehaald en teruggezet naar de start."
 		);
@@ -377,27 +434,27 @@ public class SpeurtochtManager {
 		return true;
 	}
 
-	public boolean RemovePlayerRelease(Player p, World commandWorld) {
+	public boolean RemovePlayerRelease(Player player, World commandWorld) {
 		SpeurtochtSession session = GetSession(commandWorld);
 
 		if (session == null) {
 			return false;
 		}
 
-		if (Master.isBegeleider(p)) {
+		if (Master.isBegeleider(player)) {
 			return false;
 		}
 
-		if (!session.hasActivePlayer(p.getUniqueId())) {
+		if (!session.hasActivePlayer(player.getUniqueId())) {
 			return false;
 		}
 
-		session.removeActivePlayer(p.getUniqueId());
-		RemovePlayerSessionLink(p.getUniqueId(), session);
-		session.getTimerBar().RemovePlayer(p);
-		Master.FreezeManager.UnFreeze(p);
+		session.removeActivePlayer(player.getUniqueId());
+		RemovePlayerSessionLink(player.getUniqueId(), session);
+		session.getTimerBar().RemovePlayer(player);
+		Master.FreezeManager.UnFreeze(player);
 
-		p.sendMessage(
+		player.sendMessage(
 				ChatColor.YELLOW
 						+ "Je bent uit de speurtocht gehaald en vrijgegeven."
 		);
@@ -410,7 +467,9 @@ public class SpeurtochtManager {
 			return null;
 		}
 
-		return activeSessionsByWorld.get(world.getName());
+		String sessionKey = GetSessionKey(world);
+
+		return activeSessionsBySessionKey.get(sessionKey);
 	}
 
 	private void UnregisterSession(SpeurtochtSession session) {
@@ -418,11 +477,11 @@ public class SpeurtochtManager {
 			return;
 		}
 
-		World world = session.getActiveWorld();
-
-		if (world != null) {
-			activeSessionsByWorld.remove(world.getName());
-		}
+		/*
+		 * Veilig verwijderen op basis van objectreferentie.
+		 * Dit werkt ook als activeWorld null zou zijn of als de sessie-key later anders wordt bepaald.
+		 */
+		activeSessionsBySessionKey.entrySet().removeIf(entry -> entry.getValue() == session);
 
 		for (UUID uuid : session.copyActivePlayers()) {
 			RemovePlayerSessionLink(uuid, session);
@@ -445,14 +504,24 @@ public class SpeurtochtManager {
 		ConfigurationSection section = Master.getConfig().getConfigurationSection("Startpunten");
 
 		if (section != null) {
-			for (String worldName : section.getKeys(false)) {
-				Location location = LoadStartpuntFromPath("Startpunten." + worldName);
+			for (String configKey : section.getKeys(false)) {
+				Location location = LoadStartpuntFromPath("Startpunten." + configKey);
 
-				if (location == null) {
+				if (location == null || location.getWorld() == null) {
 					continue;
 				}
 
-				result.put(location.getWorld().getName(), location);
+				/*
+				 * FASE 3:
+				 * Oude configs konden een fysieke wereldnaam als key hebben.
+				 * Nieuwe configs gebruiken de sessionKey.
+				 *
+				 * Daarom normaliseren we hier altijd:
+				 * location.world -> sessionKey
+				 */
+				String sessionKey = GetSessionKey(location.getWorld());
+
+				result.put(sessionKey, location);
 			}
 		}
 
@@ -460,13 +529,21 @@ public class SpeurtochtManager {
 			return result;
 		}
 
+		/*
+		 * Legacy fallback:
+		 * Oude config had mogelijk maar één Startpunt.
+		 */
 		Location legacyStartpunt = LoadStartpuntFromPath("Startpunt");
 
 		if (legacyStartpunt != null && legacyStartpunt.getWorld() != null) {
-			result.put(legacyStartpunt.getWorld().getName(), legacyStartpunt);
+			String sessionKey = GetSessionKey(legacyStartpunt.getWorld());
+
+			result.put(sessionKey, legacyStartpunt);
 
 			Master.getLogger().info(
-					"Oud Startpunt gevonden en geladen als wereldspecifiek startpunt voor "
+					"Oud Startpunt gevonden en geladen als startpunt voor sessie "
+							+ sessionKey
+							+ " vanuit wereld "
 							+ legacyStartpunt.getWorld().getName()
 			);
 		}
@@ -512,15 +589,22 @@ public class SpeurtochtManager {
 	}
 
 	public void SaveStartpunt() {
-		for (Map.Entry<String, Location> entry : startpuntenByWorld.entrySet()) {
-			String worldName = entry.getKey();
+		/*
+		 * Oude fysieke wereldkeys verwijderen en opnieuw netjes opslaan per sessionKey.
+		 * Dit voorkomt dat je straks Startpunten.climatecrafter én
+		 * Startpunten.climatecrafter_diamant naast elkaar krijgt.
+		 */
+		Master.getConfig().set("Startpunten", null);
+
+		for (Map.Entry<String, Location> entry : startpuntenBySessionKey.entrySet()) {
+			String sessionKey = entry.getKey();
 			Location location = entry.getValue();
 
 			if (location == null || location.getWorld() == null) {
 				continue;
 			}
 
-			String path = "Startpunten." + worldName;
+			String path = "Startpunten." + sessionKey;
 
 			Master.getConfig().set(path + ".X", location.getX());
 			Master.getConfig().set(path + ".Y", location.getY());
@@ -531,5 +615,41 @@ public class SpeurtochtManager {
 		}
 
 		Master.saveConfig();
+	}
+
+	private String GetSessionKey(World world) {
+		return Master.getSessionResolver().resolveSessionKey(world);
+	}
+
+	private String GetDisplayName(String sessionKey) {
+		return Master.getSessionResolver().getDisplayName(sessionKey);
+	}
+
+	private boolean IsPlayerInSession(Player player, String sessionKey) {
+		if (player == null || sessionKey == null) {
+			return false;
+		}
+
+		if (!player.isOnline()) {
+			return false;
+		}
+
+		String playerSessionKey = GetSessionKey(player.getWorld());
+
+		return sessionKey.equals(playerSessionKey);
+	}
+
+	private void BroadcastToSession(String sessionKey, String message) {
+		if (sessionKey == null || message == null) {
+			return;
+		}
+
+		for (Player player : Master.getServer().getOnlinePlayers()) {
+			if (!IsPlayerInSession(player, sessionKey)) {
+				continue;
+			}
+
+			player.sendMessage(message);
+		}
 	}
 }
