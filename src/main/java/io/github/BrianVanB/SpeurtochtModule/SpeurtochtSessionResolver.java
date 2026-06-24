@@ -34,6 +34,16 @@ public final class SpeurtochtSessionResolver {
      */
     private final Map<String, String> sessionKeyToDisplayName = new HashMap<>();
 
+    /*
+     * Mapping:
+     *
+     * sessie-key -> type
+     *
+     * Voorbeeld:
+     * climatecrafter -> MULTI_WORLD
+     */
+    private final Map<String, SpeurtochtSessionGroupType> sessionKeyToType = new HashMap<>();
+
     public SpeurtochtSessionResolver(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin may not be null");
         reload();
@@ -42,6 +52,7 @@ public final class SpeurtochtSessionResolver {
     public void reload() {
         worldNameToSessionKey.clear();
         sessionKeyToDisplayName.clear();
+        sessionKeyToType.clear();
 
         ConfigurationSection groupsSection =
                 plugin.getConfig().getConfigurationSection("speurtocht-session-groups");
@@ -62,9 +73,13 @@ public final class SpeurtochtSessionResolver {
             }
 
             String displayName = groupSection.getString("display-name", sessionKey);
+            String rawType = groupSection.getString("type", "SINGLE_WORLD");
+            SpeurtochtSessionGroupType type = SpeurtochtSessionGroupType.fromConfig(rawType);
+
             List<String> worlds = groupSection.getStringList("worlds");
 
             sessionKeyToDisplayName.put(sessionKey, displayName);
+            sessionKeyToType.put(sessionKey, type);
 
             for (String worldName : worlds) {
                 if (worldName == null || worldName.isBlank()) {
@@ -102,6 +117,17 @@ public final class SpeurtochtSessionResolver {
         }
 
         return sessionKeyToDisplayName.getOrDefault(sessionKey, sessionKey);
+    }
+
+    public SpeurtochtSessionGroupType getType(String sessionKey) {
+        if (sessionKey == null || sessionKey.isBlank()) {
+            return SpeurtochtSessionGroupType.SINGLE_WORLD;
+        }
+
+        return sessionKeyToType.getOrDefault(
+                sessionKey,
+                SpeurtochtSessionGroupType.SINGLE_WORLD
+        );
     }
 
     public boolean isGroupedWorld(World world) {
