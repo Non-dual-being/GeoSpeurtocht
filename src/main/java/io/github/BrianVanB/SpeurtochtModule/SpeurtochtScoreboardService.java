@@ -2,6 +2,7 @@ package io.github.BrianVanB.SpeurtochtModule;
 
 import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
 
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.World;
@@ -140,13 +141,14 @@ public class SpeurtochtScoreboardService {
         String displayName = Master.getSessionResolver().getDisplayName(sessionKey);
 
         SpeurtochtSession session = Manager.GetActiveSession(world);
-        List<SpeurtochtScoreEntry> topScores = Manager.GetTopScores(world, 1);
+
+        List<SpeurtochtScoreEntry> topThree = Manager.GetTopScores(world, 3);
+        List<SpeurtochtScoreEntry> allScores = Manager.GetTopScores(world, 0);
 
         String bestTime = "-";
-
-        if (!topScores.isEmpty()) {
+        if (!topThree.isEmpty()) {
             bestTime = SpeurtochtScoreService.formatTime(
-                    topScores.get(0).getElapsedSeconds()
+                    topThree.get(0).getElapsedSeconds()
             );
         }
 
@@ -160,16 +162,23 @@ public class SpeurtochtScoreboardService {
 
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        int line = 12;
+        /*
+         * Dit haalt de rode scorecijfertjes rechts weg.
+         * Werkt op Paper API.
+         */
 
-        addLine(objective, ChatColor.YELLOW + displayName, line--);
+
+        int line = 15;
+
+        addLine(objective, ChatColor.YELLOW + trim(displayName, 24), line--);
         addLine(objective, ChatColor.GRAY + "────────────", line--);
 
         if (session == null || !session.isRunning()) {
-            addLine(objective, ChatColor.RED + "Status: gestopt", line--);
+            addLine(objective, ChatColor.WHITE + "Status: " + ChatColor.RED + "gestopt", line--);
             addLine(objective, ChatColor.WHITE + "Record: " + ChatColor.GREEN + bestTime, line--);
-            addLine(objective, ChatColor.GRAY + "Geen actieve run", line--);
+            addLine(objective, ChatColor.AQUA + "Top 3:", line--);
 
+            addTopThreeLines(objective, topThree, line);
             player.setScoreboard(board);
             return;
         }
@@ -178,10 +187,6 @@ public class SpeurtochtScoreboardService {
                 ? ChatColor.YELLOW + "gepauzeerd"
                 : ChatColor.GREEN + "actief";
 
-        String timerMode = session.getTimerMode() == TimerMode.COUNTUP
-                ? "countup"
-                : "countdown";
-
         String teamName = session.hasTeamName()
                 ? session.getTeamName()
                 : "-";
@@ -189,13 +194,80 @@ public class SpeurtochtScoreboardService {
         String currentTime = getCurrentTimeText(session);
 
         addLine(objective, ChatColor.WHITE + "Status: " + status, line--);
-        addLine(objective, ChatColor.WHITE + "Mode: " + ChatColor.AQUA + timerMode, line--);
-        addLine(objective, ChatColor.WHITE + "Team: " + ChatColor.AQUA + trim(teamName, 16), line--);
+        addLine(objective, ChatColor.WHITE + "Team: " + ChatColor.AQUA + trim(teamName, 18), line--);
         addLine(objective, ChatColor.WHITE + "Tijd: " + ChatColor.GREEN + currentTime, line--);
         addLine(objective, ChatColor.WHITE + "Record: " + ChatColor.GREEN + bestTime, line--);
         addLine(objective, ChatColor.WHITE + "Spelers: " + ChatColor.AQUA + session.getActivePlayers().size(), line--);
+        addLine(objective, ChatColor.AQUA + "Top 3:", line--);
+
+        line = addTopThreeLines(objective, topThree, line);
+
+        String currentPlaceText = getCurrentPlaceText(session, allScores);
+        addLine(objective, ChatColor.WHITE + "Plaats: " + ChatColor.GOLD + currentPlaceText, line);
 
         player.setScoreboard(board);
+    }
+
+    private int addTopThreeLines(
+            Objective objective,
+            List<SpeurtochtScoreEntry> topThree,
+            int startLine
+    ) {
+        int line = startLine;
+
+        if (topThree.isEmpty()) {
+            addLine(objective, ChatColor.GRAY + "Nog geen scores", line--);
+            addLine(objective, ChatColor.GRAY + "-", line--);
+            addLine(objective, ChatColor.GRAY + "-", line--);
+            return line;
+        }
+
+        for (int i = 0; i < 3; i++) {
+            if (i < topThree.size()) {
+                SpeurtochtScoreEntry score = topThree.get(i);
+
+                String text =
+                        ChatColor.YELLOW + String.valueOf(i + 1) + ". "
+                                + ChatColor.WHITE + trim(score.getTeamName(), 12)
+                                + ChatColor.GRAY + " "
+                                + ChatColor.GREEN + SpeurtochtScoreService.formatTime(score.getElapsedSeconds());
+
+                addLine(objective, text, line--);
+            } else {
+                addLine(objective, ChatColor.GRAY + "-", line--);
+            }
+        }
+
+        return line;
+    }
+
+    private String getCurrentPlaceText(
+            SpeurtochtSession session,
+            List<SpeurtochtScoreEntry> allScores
+    ) {
+        if (session == null || !session.isRunning()) {
+            return "-";
+        }
+
+        if (session.getTimerMode() != TimerMode.COUNTUP) {
+            return "-";
+        }
+
+        if (!session.hasTeamName()) {
+            return "-";
+        }
+
+        int currentElapsed = session.getElapsedSeconds();
+
+        int betterScores = 0;
+
+        for (SpeurtochtScoreEntry score : allScores) {
+            if (score.getElapsedSeconds() < currentElapsed) {
+                betterScores++;
+            }
+        }
+
+        return String.valueOf(betterScores + 1);
     }
 
     private String getCurrentTimeText(SpeurtochtSession session) {
@@ -204,6 +276,13 @@ public class SpeurtochtScoreboardService {
         }
 
         if (session.getTimerMode() == TimerMode.COUNTUP) {
+            if (session.hasConfiguredMinutes()) {
+                int maxSeconds = session.getConfiguredMinutes() * 60;
+                return SpeurtochtScoreService.formatTime(session.getElapsedSeconds())
+                        + "/"
+                        + SpeurtochtScoreService.formatTime(maxSeconds);
+            }
+
             return SpeurtochtScoreService.formatTime(session.getElapsedSeconds());
         }
 
@@ -217,11 +296,8 @@ public class SpeurtochtScoreboardService {
     }
 
     private void addLine(Objective objective, String text, int score) {
-        /*
-         * Scoreboard entries moeten uniek zijn.
-         * Daarom plakken we er per regel een andere ChatColor-resetcode achter.
-         */
-        String uniqueText = trim(text, 36) + ChatColor.values()[Math.max(0, Math.min(ChatColor.values().length - 1, score))];
+        String uniqueText = trim(text, 38)
+                + ChatColor.values()[Math.max(0, Math.min(ChatColor.values().length - 1, score))];
 
         objective.getScore(uniqueText).setScore(score);
     }
