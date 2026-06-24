@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 
 public class SpeurtochtManager {
 
@@ -25,12 +26,16 @@ public class SpeurtochtManager {
 	private final Map<String, SpeurtochtSession> activeSessionsBySessionKey;
 	private final Map<UUID, SpeurtochtSession> activeSessionsByPlayer;
 
+	private final SpeurtochtScoreService scoreService;
+
+
 	public SpeurtochtManager(GeoSpeurtocht plugin) {
 		Master = plugin;
 
 		startpuntenBySessionKey = LoadStartpunten();
 		activeSessionsBySessionKey = new HashMap<>();
 		activeSessionsByPlayer = new HashMap<>();
+		scoreService = new SpeurtochtScoreService(Master);
 
 		cmdExecutor = new SpeurCommands(Master, this);
 
@@ -41,8 +46,9 @@ public class SpeurtochtManager {
 		registerCommand("stoptimers");
 		registerCommand("pausetimer");
 		registerCommand("resumetimer");
-
 		registerCommand("addtime");
+		registerCommand("finishtimer");
+		registerCommand("scores");
 		registerCommand("addspeler");
 		registerCommand("removespeler");
 	}
@@ -673,6 +679,116 @@ public class SpeurtochtManager {
 		}
 
 		return session.resume();
+	}
+
+	public boolean FinishTimerWithScore(World world, String overrideTeamName) {
+		SpeurtochtSession session = GetActiveSession(world);
+
+		if (session == null || !session.isRunning()) {
+			return false;
+		}
+
+		if (session.getTimerMode() != TimerMode.COUNTUP) {
+			return false;
+		}
+
+		String sessionKey = session.getSessionKey();
+		String displayName = GetDisplayName(sessionKey);
+
+		String teamName = overrideTeamName;
+
+		if (teamName == null || teamName.isBlank()) {
+			teamName = session.getTeamName();
+		}
+
+		if (teamName == null || teamName.isBlank()) {
+			return false;
+		}
+
+		int elapsedSeconds = session.finishAndGetElapsedSeconds();
+		int playerCount = session.getActivePlayers().size();
+
+		scoreService.saveScore(
+				sessionKey,
+				teamName,
+				elapsedSeconds,
+				playerCount
+		);
+
+		session.getTimerBar().Cancel();
+
+		Location startpunt = session.getStartpunt();
+
+		if (startpunt != null && startpunt.getWorld() != null) {
+			GameMode targetMode = Master.getWorldConfiguredGameMode(startpunt.getWorld());
+
+			for (UUID uuid : session.copyActivePlayers()) {
+				Player player = Master.getServer().getPlayer(uuid);
+
+				if (player == null) {
+					continue;
+				}
+
+				if (!player.isOnline()) {
+					continue;
+				}
+
+				ResetPlayer(player, session, targetMode, true, false);
+			}
+		}
+
+		BroadcastToSession(
+				sessionKey,
+				ChatColor.GREEN
+						+ "Time-trial gefinisht voor team "
+						+ ChatColor.WHITE
+						+ teamName
+						+ ChatColor.GREEN
+						+ ". Eindtijd: "
+						+ ChatColor.WHITE
+						+ SpeurtochtScoreService.formatTime(elapsedSeconds)
+						+ ChatColor.GREEN
+						+ "."
+		);
+
+		Master.getLogger().info(
+				"Score opgeslagen voor sessie "
+						+ sessionKey
+						+ " ("
+						+ displayName
+						+ "): team="
+						+ teamName
+						+ ", tijd="
+						+ elapsedSeconds
+						+ " seconden, spelers="
+						+ playerCount
+		);
+
+		UnregisterSession(session);
+
+		return true;
+	}
+
+	public List<SpeurtochtScoreEntry> GetTopScores(World world, int limit) {
+		if (world == null) {
+			return List.of();
+		}
+
+		String sessionKey = GetSessionKey(world);
+
+		return scoreService.getTopScores(sessionKey, limit);
+	}
+
+	public boolean ResetScores(World world) {
+		if (world == null) {
+			return false;
+		}
+
+		String sessionKey = GetSessionKey(world);
+
+		scoreService.resetScores(sessionKey);
+
+		return true;
 	}
 
 	private void registerCommand(String commandName) {

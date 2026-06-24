@@ -52,6 +52,13 @@ public class SpeurCommands implements CommandExecutor {
 			case "resumetimer":
 				return handleResumeTimer(sender);
 
+			case "finishtimer":
+				return handleFinishTimer(sender, args);
+
+			case "scores":
+				return handleScores(sender, args);
+
+
 			case "addspeler":
 				return handleAddSpeler(sender, args);
 
@@ -683,6 +690,139 @@ public class SpeurCommands implements CommandExecutor {
 		);
 	}
 
+	private boolean handleFinishTimer(CommandSender sender, String[] args) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet welke time-trial gefinisht moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		String overrideTeamName;
+
+		try {
+			overrideTeamName = parseOptionalTeamName(args);
+		} catch (StartAllOptionsParseException exception) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + exception.getMessage()
+			);
+		}
+
+		if (!Manager.FinishTimerWithScore(context.world, overrideTeamName)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Kon time-trial niet finishen. Controleer of er een actieve oplopende timer is."
+			);
+		}
+
+		sender.sendMessage(
+				ChatColor.GREEN
+						+ "Score opgeslagen voor "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GREEN
+						+ "."
+		);
+
+		return true;
+	}
+
+	private boolean handleScores(CommandSender sender, String[] args) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet van welke speurtocht je scores wilt zien."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (args.length >= 1 && args[0].equalsIgnoreCase("reset")) {
+			if (args.length < 2 || !args[1].equalsIgnoreCase("--confirm")) {
+				return Master.CommandError(
+						sender,
+						ChatColor.RED
+								+ "Weet je zeker dat je de scores wilt resetten? Gebruik: "
+								+ ChatColor.WHITE
+								+ "/scores reset --confirm"
+				);
+			}
+
+			Manager.ResetScores(context.world);
+
+			sender.sendMessage(
+					ChatColor.YELLOW
+							+ "Scores gereset voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.YELLOW
+							+ "."
+			);
+
+			return true;
+		}
+
+		var scores = Manager.GetTopScores(context.world, 10);
+
+		if (scores.isEmpty()) {
+			sender.sendMessage(
+					ChatColor.YELLOW
+							+ "Nog geen scores gevonden voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.YELLOW
+							+ "."
+			);
+
+			return true;
+		}
+
+		sender.sendMessage(
+				ChatColor.GOLD
+						+ "Top scores voor "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GOLD
+						+ ":"
+		);
+
+		int position = 1;
+
+		for (SpeurtochtScoreEntry score : scores) {
+			sender.sendMessage(
+					ChatColor.YELLOW
+							+ String.valueOf(position)
+							+ ". "
+							+ ChatColor.WHITE
+							+ score.getTeamName()
+							+ ChatColor.GRAY
+							+ " - "
+							+ ChatColor.GREEN
+							+ SpeurtochtScoreService.formatTime(score.getElapsedSeconds())
+							+ ChatColor.GRAY
+							+ " ("
+							+ score.getPlayerCount()
+							+ " spelers)"
+			);
+
+			position++;
+		}
+
+		return true;
+	}
+
 	private Player getPlayerOrError(CommandSender sender, String errorMessage) {
 		if (!(sender instanceof Player)) {
 			Master.CommandError(sender, errorMessage);
@@ -710,5 +850,70 @@ public class SpeurCommands implements CommandExecutor {
 			this.sessionKey = sessionKey;
 			this.displayName = displayName;
 		}
+	}
+
+	private String parseOptionalTeamName(String[] args)
+			throws StartAllOptionsParseException {
+
+		if (args.length == 0) {
+			return null;
+		}
+
+		if (!args[0].equalsIgnoreCase("--team")) {
+			throw new StartAllOptionsParseException(
+					"Onbekende optie. Gebruik: /finishtimer of /finishtimer --team \"Teamnaam\""
+			);
+		}
+
+		if (args.length < 2) {
+			throw new StartAllOptionsParseException(
+					"Geef een teamnaam op na --team."
+			);
+		}
+
+		StringBuilder builder = new StringBuilder();
+
+		for (int i = 1; i < args.length; i++) {
+			if (args[i].startsWith("--")) {
+				throw new StartAllOptionsParseException(
+						"Onbekende extra optie: " + args[i]
+				);
+			}
+
+			if (builder.length() > 0) {
+				builder.append(" ");
+			}
+
+			builder.append(args[i]);
+		}
+
+		String teamName = builder.toString().trim();
+
+		if (
+				(teamName.startsWith("\"") && teamName.endsWith("\"")) ||
+						(teamName.startsWith("'") && teamName.endsWith("'"))
+		) {
+			teamName = teamName.substring(1, teamName.length() - 1).trim();
+		}
+
+		if (teamName.isBlank()) {
+			throw new StartAllOptionsParseException(
+					"Teamnaam mag niet leeg zijn."
+			);
+		}
+
+		if (teamName.length() > 48) {
+			throw new StartAllOptionsParseException(
+					"Teamnaam mag maximaal 48 tekens bevatten."
+			);
+		}
+
+		if (!teamName.matches("[\\p{L}\\p{N} ._\\-]+")) {
+			throw new StartAllOptionsParseException(
+					"Teamnaam mag alleen letters, cijfers, spaties, punten, underscores en streepjes bevatten."
+			);
+		}
+
+		return teamName;
 	}
 }
