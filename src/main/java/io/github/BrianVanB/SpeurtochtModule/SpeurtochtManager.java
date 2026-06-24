@@ -2,6 +2,8 @@ package io.github.BrianVanB.SpeurtochtModule;
 
 import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
 
+import org.bukkit.command.PluginCommand;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
@@ -32,23 +34,17 @@ public class SpeurtochtManager {
 
 		cmdExecutor = new SpeurCommands(Master, this);
 
-		Master.getCommand("setstart").setExecutor(cmdExecutor);
-		Master.getCommand("startpunt").setExecutor(cmdExecutor);
-		Master.getCommand("startall").setExecutor(cmdExecutor);
-		Master.getCommand("stopall").setExecutor(cmdExecutor);
-		Master.getCommand("stoptimers").setExecutor(cmdExecutor);
+		registerCommand("setstart");
+		registerCommand("startpunt");
+		registerCommand("startall");
+		registerCommand("stopall");
+		registerCommand("stoptimers");
+		registerCommand("pausetimer");
+		registerCommand("resumetimer");
 
-		/*
-		 * Fase 4:
-		 * Deze twee stonden nog niet in jouw constructor.
-		 * Als ze niet in plugin.yml staan, geeft getCommand(...) null.
-		 */
-		Master.getCommand("pausetimer").setExecutor(cmdExecutor);
-		Master.getCommand("resumetimer").setExecutor(cmdExecutor);
-
-		Master.getCommand("addtime").setExecutor(cmdExecutor);
-		Master.getCommand("addspeler").setExecutor(cmdExecutor);
-		Master.getCommand("removespeler").setExecutor(cmdExecutor);
+		registerCommand("addtime");
+		registerCommand("addspeler");
+		registerCommand("removespeler");
 	}
 
 	public boolean IsRunning(World world) {
@@ -677,5 +673,18 @@ public class SpeurtochtManager {
 		}
 
 		return session.resume();
+	}
+
+	private void registerCommand(String commandName) {
+		PluginCommand command = Master.getCommand(commandName);
+
+		if (command == null) {
+			Master.getLogger().severe(
+					"Command ontbreekt in plugin.yml: /" + commandName
+			);
+			return;
+		}
+
+		command.setExecutor(cmdExecutor);
 	}
 }
