@@ -106,6 +106,12 @@ commands:
     permission: begeleider
     permission-message: Je hebt geen permissie om dat te doen
 
+  scoreboardtoggle:
+    description: Zet de speurtocht-sidebar aan of uit
+    usage: "Gebruik: /scoreboardtoggle"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
   kinderkiller:
     description: The mighty stick
     usage: ""

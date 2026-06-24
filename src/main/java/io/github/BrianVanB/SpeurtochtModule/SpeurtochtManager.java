@@ -27,7 +27,7 @@ public class SpeurtochtManager {
 	private final Map<UUID, SpeurtochtSession> activeSessionsByPlayer;
 
 	private final SpeurtochtScoreService scoreService;
-
+	private final SpeurtochtScoreboardService scoreboardService;
 
 	public SpeurtochtManager(GeoSpeurtocht plugin) {
 		Master = plugin;
@@ -36,6 +36,7 @@ public class SpeurtochtManager {
 		activeSessionsBySessionKey = new HashMap<>();
 		activeSessionsByPlayer = new HashMap<>();
 		scoreService = new SpeurtochtScoreService(Master);
+		scoreboardService = new SpeurtochtScoreboardService(Master, this);
 
 		cmdExecutor = new SpeurCommands(Master, this);
 
@@ -49,6 +50,7 @@ public class SpeurtochtManager {
 		registerCommand("addtime");
 		registerCommand("finishtimer");
 		registerCommand("scores");
+		registerCommand("scoreboardtoggle");
 		registerCommand("addspeler");
 		registerCommand("removespeler");
 	}
@@ -789,6 +791,22 @@ public class SpeurtochtManager {
 		scoreService.resetScores(sessionKey);
 
 		return true;
+	}
+
+	public boolean ToggleScoreboard(Player player) {
+		if (player == null) {
+			return false;
+		}
+
+		return scoreboardService.toggle(player);
+	}
+
+	public boolean IsScoreboardEnabled(Player player) {
+		if (player == null) {
+			return false;
+		}
+
+		return scoreboardService.isEnabled(player);
 	}
 
 	private void registerCommand(String commandName) {

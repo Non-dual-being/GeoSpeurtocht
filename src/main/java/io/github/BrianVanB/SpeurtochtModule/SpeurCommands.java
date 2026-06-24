@@ -58,6 +58,8 @@ public class SpeurCommands implements CommandExecutor {
 			case "scores":
 				return handleScores(sender, args);
 
+			case "scoreboardtoggle":
+				return handleScoreboardToggle(sender);
 
 			case "addspeler":
 				return handleAddSpeler(sender, args);
@@ -688,6 +690,35 @@ public class SpeurCommands implements CommandExecutor {
 				sender,
 				ChatColor.RED + "Onbekende optie. Gebruik freeze of release."
 		);
+	}
+
+	private boolean handleScoreboardToggle(CommandSender sender) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet bij wie het scoreboard getoond moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		boolean enabled = Manager.ToggleScoreboard(player);
+
+		if (enabled) {
+			sender.sendMessage(
+					ChatColor.GREEN + "Scoreboard/sidebar aangezet."
+			);
+
+			return true;
+		}
+
+		sender.sendMessage(
+				ChatColor.YELLOW + "Scoreboard/sidebar uitgezet."
+		);
+
+		return true;
 	}
 
 	private boolean handleFinishTimer(CommandSender sender, String[] args) {
