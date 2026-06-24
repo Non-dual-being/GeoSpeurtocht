@@ -94,6 +94,18 @@ commands:
     permission: begeleider
     permission-message: Je hebt geen permissie om dat te doen
 
+  finishtimer:
+    description: Finisht een actieve time-trial en slaat de score op
+    usage: 'Gebruik: /finishtimer of /finishtimer --team "Teamnaam"'
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  scores:
+    description: Toon of reset scores van de huidige speurtocht
+    usage: "Gebruik: /scores of /scores reset --confirm"
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
   kinderkiller:
     description: The mighty stick
     usage: ""
