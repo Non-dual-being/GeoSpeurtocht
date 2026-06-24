@@ -2,6 +2,8 @@ package io.github.BrianVanB.SpeurtochtModule;
 
 import io.github.BrianVanB.GeoSpeurtocht.GeoSpeurtocht;
 
+import org.bukkit.command.PluginCommand;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
@@ -19,32 +21,8 @@ public class SpeurtochtManager {
 	private final GeoSpeurtocht Master;
 	private final SpeurCommands cmdExecutor;
 
-	/*
-	 * FASE 3:
-	 * Deze map is niet meer echt "by world", maar "by session key".
-	 *
-	 * Voorbeeld:
-	 * GeoFort_Heat             -> startpunt in GeoFort_Heat
-	 * GeoFort_overstroming     -> startpunt in GeoFort_overstroming
-	 * climatecrafter           -> startpunt in bijvoorbeeld climatecrafter_diamant
-	 */
 	private final Map<String, Location> startpuntenBySessionKey;
-
-	/*
-	 * FASE 3:
-	 * Actieve sessies worden opgeslagen per logische speurtocht-sessie.
-	 *
-	 * Voorbeeld:
-	 * GeoFort_Heat             -> eigen sessie
-	 * GeoFort_overstroming     -> eigen sessie
-	 * climatecrafter           -> gezamenlijke sessie voor diamant/goud/ijzer/koper/steenkool
-	 */
 	private final Map<String, SpeurtochtSession> activeSessionsBySessionKey;
-
-	/*
-	 * Snelle lookup:
-	 * speler UUID -> actieve speurtocht sessie
-	 */
 	private final Map<UUID, SpeurtochtSession> activeSessionsByPlayer;
 
 	public SpeurtochtManager(GeoSpeurtocht plugin) {
@@ -56,15 +34,17 @@ public class SpeurtochtManager {
 
 		cmdExecutor = new SpeurCommands(Master, this);
 
-		Master.getCommand("setstart").setExecutor(cmdExecutor);
-		Master.getCommand("startpunt").setExecutor(cmdExecutor);
-		Master.getCommand("startall").setExecutor(cmdExecutor);
-		Master.getCommand("stopall").setExecutor(cmdExecutor);
-		Master.getCommand("stoptimers").setExecutor(cmdExecutor);
+		registerCommand("setstart");
+		registerCommand("startpunt");
+		registerCommand("startall");
+		registerCommand("stopall");
+		registerCommand("stoptimers");
+		registerCommand("pausetimer");
+		registerCommand("resumetimer");
 
-		Master.getCommand("addtime").setExecutor(cmdExecutor);
-		Master.getCommand("addspeler").setExecutor(cmdExecutor);
-		Master.getCommand("removespeler").setExecutor(cmdExecutor);
+		registerCommand("addtime");
+		registerCommand("addspeler");
+		registerCommand("removespeler");
 	}
 
 	public boolean IsRunning(World world) {
@@ -108,22 +88,37 @@ public class SpeurtochtManager {
 
 		String sessionKey = GetSessionKey(location.getWorld());
 
-		/*
-		 * Belangrijk:
-		 * De key is de logische sessie.
-		 * De Location zelf bewaart nog steeds de echte Minecraft-wereld.
-		 *
-		 * Dus:
-		 * key: climatecrafter
-		 * location.world: climatecrafter_diamant
-		 */
 		startpuntenBySessionKey.put(sessionKey, location);
 
 		SaveStartpunt();
 	}
 
+	/*
+	 * Oude methode blijft bestaan.
+	 * Alles wat nog StartSpeurtocht(world, minutes) gebruikt,
+	 * blijft dus gewoon werken als COUNTDOWN.
+	 */
 	public void StartSpeurtocht(World world, int minutes) {
-		if (world == null) {
+		StartAllOptions options = new StartAllOptions(
+				TimerMode.COUNTDOWN,
+				minutes,
+				null
+		);
+
+		StartSpeurtocht(world, options);
+	}
+
+	/*
+	 * Nieuwe fase-4-startmethode.
+	 * Deze ondersteunt:
+	 *
+	 * /startall 30
+	 * /startall 30 --countdown
+	 * /startall --countup --team "Team Blauw"
+	 * /startall 45 --countup --team "Team Blauw"
+	 */
+	public void StartSpeurtocht(World world, StartAllOptions options) {
+		if (world == null || options == null) {
 			return;
 		}
 
@@ -131,35 +126,36 @@ public class SpeurtochtManager {
 		String displayName = GetDisplayName(sessionKey);
 
 		if (activeSessionsBySessionKey.containsKey(sessionKey)) {
+			Master.getLogger().warning(
+					"Kan speurtocht niet starten: sessie is al actief: " + sessionKey
+			);
 			return;
 		}
 
 		Location startpunt = GetStartpunt(world);
 
 		if (startpunt == null) {
+			Master.getLogger().warning(
+					"Kan speurtocht niet starten: geen startpunt voor sessie " + sessionKey
+			);
 			return;
 		}
 
 		BossBarTimer timerBar = new BossBarTimer(Master);
 
-		/*
-		 * activeWorld blijft de wereld van waaruit je start.
-		 * Bij ClimateCrafter kan dat bijvoorbeeld climatecrafter_diamant zijn.
-		 */
-		SpeurtochtSession session = new SpeurtochtSession(startpunt, world, timerBar);
+		SpeurtochtSession session = new SpeurtochtSession(
+				sessionKey,
+				startpunt,
+				world,
+				timerBar,
+				options
+		);
 
 		/*
-		 * FASE 3:
-		 * Niet meer alleen world.getPlayers().
-		 *
-		 * Want bij ClimateCrafter moeten spelers uit:
-		 * - climatecrafter_diamant
-		 * - climatecrafter_goud
-		 * - climatecrafter_ijzer
-		 * - climatecrafter_koper
-		 * - climatecrafter_steenkool
-		 *
-		 * allemaal bij dezelfde sessie kunnen horen.
+		 * Fase 3/4:
+		 * Niet meer alleen spelers uit de fysieke command-world.
+		 * Master.isSpeurtochtSpeler(...) kijkt via de sessionResolver
+		 * of de speler in dezelfde logische speurtocht zit.
 		 */
 		for (Player player : Master.getServer().getOnlinePlayers()) {
 			if (!Master.isSpeurtochtSpeler(player, world)) {
@@ -179,12 +175,18 @@ public class SpeurtochtManager {
 						+ displayName
 						+ ") vanuit wereld "
 						+ world.getName()
-						+ "..."
+						+ " met timerMode="
+						+ options.getTimerMode()
+						+ ", minutes="
+						+ options.getConfiguredMinutes()
+						+ ", team="
+						+ options.getTeamName()
 		);
 
 		/*
-		 * Deze blijft staan voor backwards compatibility.
-		 * Daarna unfreezen we sowieso de actieve spelers individueel.
+		 * Deze mag blijven staan voor je oude flow.
+		 * Bij MULTI_WORLD unfreezet dit alleen de fysieke wereld,
+		 * maar hieronder unfreezen we de actieve spelers individueel.
 		 */
 		Master.FreezeManager.Unfreezeall(world);
 
@@ -209,15 +211,35 @@ public class SpeurtochtManager {
 				ChatColor.GREEN + "Je mag nu beginnen. Succes!"
 		);
 
-		BroadcastToSession(
-				sessionKey,
-				ChatColor.GOLD + "Je hebt " + minutes + " minuten."
-		);
+		if (options.isCountdown()) {
+			BroadcastToSession(
+					sessionKey,
+					ChatColor.GOLD
+							+ "Je hebt "
+							+ options.getConfiguredMinutes()
+							+ " minuten."
+			);
+		} else {
+			String maxTimeText = options.hasConfiguredMinutes()
+					? "Maximale tijd: " + options.getConfiguredMinutes() + " minuten."
+					: "Er is geen maximale tijd ingesteld.";
 
-		session.setRunning(true);
+			BroadcastToSession(
+					sessionKey,
+					ChatColor.GOLD
+							+ "Time-trial gestart voor team "
+							+ ChatColor.WHITE
+							+ options.getTeamName()
+							+ ChatColor.GOLD
+							+ ". "
+							+ maxTimeText
+			);
+		}
+
+		session.markStarted();
 
 		timerBar.Create(
-				minutes,
+				options,
 				world,
 				session.copyActivePlayers(),
 				() -> FinishSpeurtocht(world, false, true, false)
@@ -248,18 +270,9 @@ public class SpeurtochtManager {
 
 		String sessionKey = GetSessionKey(finishedWorld);
 
-		/*
-		 * We gebruiken de gamemode van de startpuntwereld.
-		 * Dat is veiliger dan blind de command-world gebruiken.
-		 */
 		GameMode targetMode = Master.getWorldConfiguredGameMode(startpunt.getWorld());
 
 		if (force) {
-			/*
-			 * FASE 3:
-			 * Force geldt voor de volledige logische sessie.
-			 * Dus bij ClimateCrafter niet alleen de fysieke wereld waarin je staat.
-			 */
 			for (Player player : Master.getServer().getOnlinePlayers()) {
 				if (!IsPlayerInSession(player, sessionKey)) {
 					continue;
@@ -477,10 +490,6 @@ public class SpeurtochtManager {
 			return;
 		}
 
-		/*
-		 * Veilig verwijderen op basis van objectreferentie.
-		 * Dit werkt ook als activeWorld null zou zijn of als de sessie-key later anders wordt bepaald.
-		 */
 		activeSessionsBySessionKey.entrySet().removeIf(entry -> entry.getValue() == session);
 
 		for (UUID uuid : session.copyActivePlayers()) {
@@ -511,14 +520,6 @@ public class SpeurtochtManager {
 					continue;
 				}
 
-				/*
-				 * FASE 3:
-				 * Oude configs konden een fysieke wereldnaam als key hebben.
-				 * Nieuwe configs gebruiken de sessionKey.
-				 *
-				 * Daarom normaliseren we hier altijd:
-				 * location.world -> sessionKey
-				 */
 				String sessionKey = GetSessionKey(location.getWorld());
 
 				result.put(sessionKey, location);
@@ -529,10 +530,6 @@ public class SpeurtochtManager {
 			return result;
 		}
 
-		/*
-		 * Legacy fallback:
-		 * Oude config had mogelijk maar één Startpunt.
-		 */
 		Location legacyStartpunt = LoadStartpuntFromPath("Startpunt");
 
 		if (legacyStartpunt != null && legacyStartpunt.getWorld() != null) {
@@ -589,11 +586,6 @@ public class SpeurtochtManager {
 	}
 
 	public void SaveStartpunt() {
-		/*
-		 * Oude fysieke wereldkeys verwijderen en opnieuw netjes opslaan per sessionKey.
-		 * Dit voorkomt dat je straks Startpunten.climatecrafter én
-		 * Startpunten.climatecrafter_diamant naast elkaar krijgt.
-		 */
 		Master.getConfig().set("Startpunten", null);
 
 		for (Map.Entry<String, Location> entry : startpuntenBySessionKey.entrySet()) {
@@ -651,5 +643,48 @@ public class SpeurtochtManager {
 
 			player.sendMessage(message);
 		}
+	}
+
+	public SpeurtochtSession GetActiveSession(World world) {
+		if (world == null) {
+			return null;
+		}
+
+		String sessionKey = GetSessionKey(world);
+
+		return activeSessionsBySessionKey.get(sessionKey);
+	}
+
+	public boolean PauseTimer(World world) {
+		SpeurtochtSession session = GetActiveSession(world);
+
+		if (session == null || !session.isRunning()) {
+			return false;
+		}
+
+		return session.pause();
+	}
+
+	public boolean ResumeTimer(World world) {
+		SpeurtochtSession session = GetActiveSession(world);
+
+		if (session == null || !session.isRunning()) {
+			return false;
+		}
+
+		return session.resume();
+	}
+
+	private void registerCommand(String commandName) {
+		PluginCommand command = Master.getCommand(commandName);
+
+		if (command == null) {
+			Master.getLogger().severe(
+					"Command ontbreekt in plugin.yml: /" + commandName
+			);
+			return;
+		}
+
+		command.setExecutor(cmdExecutor);
 	}
 }

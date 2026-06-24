@@ -65,8 +65,8 @@ commands:
     permission-message: Je hebt geen permissie om dat te doen
 
   startall:
-    description: Start de speurtocht
-    usage: "Gebruik: /startall <tijd in minuten>"
+    description: Start de speurtocht of time-trial
+    usage: 'Gebruik: /startall <minuten> [--countdown] of /startall [minuten] --countup --team "Teamnaam"'
     permission: begeleider
     permission-message: Je hebt geen permissie om dat te doen
 
@@ -76,8 +76,20 @@ commands:
     permission: begeleider
     permission-message: Je hebt geen permissie om dat te doen
 
+  pausetimer:
+    description: Pauzeert de actieve speurtocht-timer.
+    usage: /pausetimer
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
+  resumetimer:
+    description: Hervat de actieve speurtocht-timer.
+    usage: /resumetimer
+    permission: begeleider
+    permission-message: Je hebt geen permissie om dat te doen
+
   stoptimers:
-    description: Stopt de speurtocht die nu bezig is maar laat de spelers wel doorspelen
+    description: Stopt alleen de actieve speurtocht-timer zonder spelers te resetten
     usage: "Gebruik: /stoptimers"
     permission: begeleider
     permission-message: Je hebt geen permissie om dat te doen
