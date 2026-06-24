@@ -76,11 +76,15 @@ commands:
     permission: begeleider
     permission-message: Je hebt geen permissie om dat te doen
 
-  stoptimers:
-    description: Stopt de speurtocht die nu bezig is maar laat de spelers wel doorspelen
-    usage: "Gebruik: /stoptimers"
+  pausetimer:
+    description: Pauzeert de actieve speurtocht-timer.
+    usage: /pausetimer
     permission: begeleider
-    permission-message: Je hebt geen permissie om dat te doen
+
+  resumetimer:
+    description: Hervat de actieve speurtocht-timer.
+    usage: /resumetimer
+    permission: begeleider
 
   kinderkiller:
     description: The mighty stick

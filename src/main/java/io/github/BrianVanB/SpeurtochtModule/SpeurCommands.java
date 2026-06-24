@@ -9,6 +9,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+
 public class SpeurCommands implements CommandExecutor {
 
 	private final GeoSpeurtocht Master;
@@ -44,6 +45,12 @@ public class SpeurCommands implements CommandExecutor {
 
 			case "addtime":
 				return handleAddTime(sender, args);
+
+			case "pausetimer":
+				return handlePauseTimer(sender);
+
+			case "resumetimer":
+				return handleResumeTimer(sender);
 
 			case "addspeler":
 				return handleAddSpeler(sender, args);
@@ -139,6 +146,17 @@ public class SpeurCommands implements CommandExecutor {
 	}
 
 	private boolean handleStartAll(CommandSender sender, String[] args) {
+		StartAllOptions options;
+
+		try {
+			options = StartAllOptionsParser.parse(args);
+		} catch (StartAllOptionsParseException exception) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED + exception.getMessage()
+			);
+		}
+
 		Player player = getPlayerOrError(
 				sender,
 				ChatColor.RED
@@ -164,16 +182,6 @@ public class SpeurCommands implements CommandExecutor {
 			);
 		}
 
-		if (args.length < 1) {
-			return Master.CommandError(
-					sender,
-					ChatColor.RED
-							+ "Geen tijd gegeven. Gebruik: "
-							+ ChatColor.WHITE
-							+ Master.getCommand("startall").getUsage()
-			);
-		}
-
 		if (Manager.IsRunning(context.world)) {
 			return Master.CommandError(
 					sender,
@@ -186,49 +194,59 @@ public class SpeurCommands implements CommandExecutor {
 			);
 		}
 
-		int minutes;
-
-		try {
-			minutes = Integer.parseInt(args[0]);
-		} catch (NumberFormatException e) {
-			return Master.CommandError(
-					sender,
-					ChatColor.RED + "Ongeldige waarde voor tijd."
-			);
-		}
-
-		if (minutes <= 0) {
-			return Master.CommandError(
-					sender,
-					ChatColor.RED + "Tijd moet groter zijn dan 0."
-			);
-		}
-
 		Master.getLogger().info(
 				"Speurtocht wordt gestart voor sessie "
 						+ context.sessionKey
 						+ " vanuit wereld "
 						+ context.world.getName()
-						+ " voor "
-						+ minutes
-						+ " minuten."
+						+ " met timerMode="
+						+ options.getTimerMode()
+						+ ", minutes="
+						+ options.getConfiguredMinutes()
+						+ ", team="
+						+ options.getTeamName()
 		);
 
-		Manager.StartSpeurtocht(context.world, minutes);
+		Manager.StartSpeurtocht(context.world, options);
+
+		if (options.isCountdown()) {
+			sender.sendMessage(
+					ChatColor.GREEN
+							+ "Speurtocht gestart voor "
+							+ ChatColor.WHITE
+							+ context.displayName
+							+ ChatColor.GREEN
+							+ " met aflopende timer van "
+							+ ChatColor.WHITE
+							+ options.getConfiguredMinutes()
+							+ ChatColor.GREEN
+							+ " minuten."
+			);
+
+			return true;
+		}
+
+		String maxTimeText = options.hasConfiguredMinutes()
+				? " met maximale tijd van " + options.getConfiguredMinutes() + " minuten"
+				: " zonder maximale tijd";
 
 		sender.sendMessage(
 				ChatColor.GREEN
-						+ "Speurtocht gestart voor "
+						+ "Time-trial gestart voor "
 						+ ChatColor.WHITE
 						+ context.displayName
 						+ ChatColor.GREEN
-						+ " voor "
-						+ minutes
-						+ " minuten."
+						+ " voor team "
+						+ ChatColor.WHITE
+						+ options.getTeamName()
+						+ ChatColor.GREEN
+						+ maxTimeText
+						+ "."
 		);
 
 		return true;
 	}
+
 
 	private boolean handleStopAll(CommandSender sender, String[] args) {
 		Player player = getPlayerOrError(
@@ -424,6 +442,74 @@ public class SpeurCommands implements CommandExecutor {
 						+ "Er zijn "
 						+ seconds
 						+ " seconden toegevoegd aan de timer."
+		);
+
+		return true;
+	}
+
+	private boolean handlePauseTimer(CommandSender sender) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet welke timer gepauzeerd moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (!Manager.PauseTimer(context.world)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Kon timer niet pauzeren. Er is geen actieve timer, of de timer is al gepauzeerd."
+			);
+		}
+
+		sender.sendMessage(
+				ChatColor.YELLOW
+						+ "Timer gepauzeerd voor "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.YELLOW
+						+ "."
+		);
+
+		return true;
+	}
+
+	private boolean handleResumeTimer(CommandSender sender) {
+		Player player = getPlayerOrError(
+				sender,
+				ChatColor.RED
+						+ "Dit commando moet door een speler worden uitgevoerd, "
+						+ "zodat de plugin weet welke timer hervat moet worden."
+		);
+
+		if (player == null) {
+			return false;
+		}
+
+		SessionContext context = getSessionContext(player);
+
+		if (!Manager.ResumeTimer(context.world)) {
+			return Master.CommandError(
+					sender,
+					ChatColor.RED
+							+ "Kon timer niet hervatten. Er is geen actieve gepauzeerde timer."
+			);
+		}
+
+		sender.sendMessage(
+				ChatColor.GREEN
+						+ "Timer hervat voor "
+						+ ChatColor.WHITE
+						+ context.displayName
+						+ ChatColor.GREEN
+						+ "."
 		);
 
 		return true;
