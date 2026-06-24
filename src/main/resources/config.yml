@@ -1,9 +1,20 @@
 speurtocht-session-groups:
   climatecrafter:
     display-name: "ClimateCrafter"
+    type: "MULTI_WORLD"
     worlds:
       - climatecrafter_diamant
       - climatecrafter_goud
       - climatecrafter_ijzer
       - climatecrafter_koper
       - climatecrafter_steenkool
+
+  klimaatspeurtocht:
+    display-name: "Klimaatspeurtocht"
+    type: "MULTI_WORLD"
+    worlds:
+      - klimaatspeurtocht_oceanen
+      - klimaatspeurtocht_natuur
+      - klimaatspeurtocht_afval
+      - klimaatspeurtocht_lucht
+      - klimaatspeurtocht_klimaat
